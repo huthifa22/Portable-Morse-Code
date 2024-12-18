@@ -24,6 +24,12 @@ void loop() {
 }
 
 void onTextMessageChange() {
+  textMessage.trim();
+    if (textMessage.isEmpty() || textMessage == "" || 
+      textMessage.startsWith("PMC received:") || textMessage == "\x1B") {
+      return;
+    }
+
     Serial.print("Message received: ");
     Serial.println(textMessage);
 
