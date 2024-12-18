@@ -1,6 +1,7 @@
 #include <WiFiNINA.h>
 #include "thingProperties.h" 
 #include "config.h" 
+#include "MorseUtils.h"
 
 void setup() {
   Serial.begin(9600);
@@ -23,6 +24,14 @@ void loop() {
 }
 
 void onTextMessageChange() {
-  Serial.print("Message received: ");
-  Serial.println(textMessage);
+    Serial.print("Message received: ");
+    Serial.println(textMessage);
+
+    String morseCode = textToMorse(textMessage);
+    Serial.print("Morse Code: ");
+    Serial.println(morseCode);
+
+    textMessage = "PMC received: \"" + textMessage + "\" | Morse: " + morseCode;
+
+    Serial.println("Acknowledgment sent to cloud.");
 }
