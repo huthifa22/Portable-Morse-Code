@@ -3,15 +3,29 @@
 #include "config.h" 
 #include "MorseUtils.h"
 
+void connectToWiFi() {
+  Serial.println("Connecting to Wi-Fi...");
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(SECRET_SSID, SECRET_OPTIONAL_PASS);
+
+    for (int i = 0; i < 5; i++) {
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("Wi-Fi Connected!");
+        return; 
+      }
+      delay(1000); 
+      Serial.print(".");
+    }
+    Serial.println("\nStill trying to connect to Wi-Fi...");
+  }
+}
+
 void setup() {
   Serial.begin(9600);
   while (!Serial);
 
-  Serial.println("Connecting to Wi-Fi...");
-  WiFi.begin(SECRET_SSID, SECRET_OPTIONAL_PASS); 
-  while (WiFi.status() != WL_CONNECTED);
-  Serial.println("Wi-Fi Connected!");
-
+  connectToWiFi();
   initProperties();
 
   ArduinoCloud.begin(ArduinoIoTPreferredConnection);
