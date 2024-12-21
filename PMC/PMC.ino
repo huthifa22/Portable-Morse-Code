@@ -51,6 +51,9 @@ void onTextMessageChange() {
     Serial.print("Morse Code: ");
     Serial.println(morseCode);
 
+    //Light Morse Code on Pin D12 and speed 15 WPM
+    blinkMorse(morseCode, 12, 15);
+
     textMessage = "PMC received: \"" + textMessage + "\" | Morse: " + morseCode;
 
     Serial.println("Acknowledgment sent to cloud.");
