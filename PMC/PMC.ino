@@ -6,6 +6,7 @@
 #include "Adafruit_GFX.h"
 #include "Adafruit_ILI9341.h"
 #include "TouchScreen.h"
+#include <vector>
 
 // TFT Display SPI Pins
 #define TFT_CLK 13
@@ -45,6 +46,8 @@ const int keySpacing = 5;
 char wifiSSID[32] = "";   
 char wifiPassword[32] = ""; 
 String textMessage = "";
+std::vector<String> messageQueue;
+int currentMessageIndex = -1; 
 
 enum AppState {
   STATE_STARTUP,
@@ -53,7 +56,8 @@ enum AppState {
   STATE_CONNECTION,
   STATE_MAIN_MENU,
   STATE_ENCODE,
-  STATE_DECODE
+  STATE_DECODE,
+  STATE_MAIL
 };
 
 enum KeyboardState {
@@ -62,6 +66,7 @@ enum KeyboardState {
   STATE_SYMBOLS
 };
 
+bool screenDrawn = false;
 AppState currentState = STATE_STARTUP;
 KeyboardState currentKeyboardState = STATE_UPPERCASE;
 
@@ -101,6 +106,10 @@ void loop() {
     case STATE_DECODE:
       runDecodeScreen();
       break;
+
+    case STATE_MAIL:
+      runMailScreen();
+      break;
   }
   // Checking for Cloud Messages if the Wifi and Cloud are connected
     if (WiFi.status() == WL_CONNECTED && ArduinoCloud.connected()) {
@@ -109,7 +118,6 @@ void loop() {
 }
 
 void runStartupScreen() {
-  static bool screenDrawn = false;
 
   if (!screenDrawn) {
     resetState();
@@ -138,7 +146,6 @@ void runStartupScreen() {
 }
 
 void runWiFiSetupScreen() {
-  static bool screenDrawn = false;
 
   if (!screenDrawn) {
     resetState();
@@ -196,7 +203,6 @@ void runWiFiSetupScreen() {
 }
 
 void runWiFiCredentialsScreen() {
-    static bool screenDrawn = false;
     static String selectedBox = "SSID";
     static String ssid = "test";
     static String password = "test";
@@ -216,7 +222,7 @@ void runWiFiCredentialsScreen() {
         tft.print("Password:");
         tft.drawRect(150, 50, tft.width() - 160, 30, (selectedBox == "Password") ? ILI9341_GREEN : ILI9341_WHITE);
 
-        int maxSSIDChars = (tft.width() - 160) / 12; 
+        int maxSSIDChars = (tft.width() - 160) / 12;
         ssidScrollOffset = max(0, (int)ssid.length() - maxSSIDChars);
         tft.setCursor(155, 15);
         tft.print(ssid.substring(ssidScrollOffset));
@@ -227,6 +233,21 @@ void runWiFiCredentialsScreen() {
         for (int i = passwordScrollOffset; i < password.length(); ++i) {
             tft.print("*");
         }
+
+        // "EXIT" button
+        int exitButtonX = 5;
+        int exitButtonY = 80;
+        int exitButtonWidth = 60;
+        int exitButtonHeight = 25;
+        int textWidth = 12 * 4;
+        int textHeight = 16;
+        int16_t textX = exitButtonX + (exitButtonWidth - textWidth) / 2;
+        int16_t textY = exitButtonY + (exitButtonHeight - textHeight) / 2 + 2;
+
+        tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
+        tft.setCursor(textX, textY);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print("EXIT");
 
         drawKeyboard();
         screenDrawn = true;
@@ -290,6 +311,18 @@ void runWiFiCredentialsScreen() {
                 tft.drawRect(150, 50, tft.width() - 160, 30, ILI9341_GREEN);
                 tft.drawRect(150, 10, tft.width() - 160, 30, ILI9341_WHITE);
             }
+        }
+
+        // Check if "EXIT" button is pressed
+        int exitButtonX = 10;
+        int exitButtonY = 90;
+        int exitButtonWidth = 100;
+        int exitButtonHeight = 40;
+
+        if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth &&
+            calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+            screenDrawn = false;
+            currentState = STATE_MAIN_MENU;
         }
     }
 }
@@ -519,7 +552,7 @@ void runConnectionState() {
 }
 
 void runMainMenuScreen() {
-    static bool screenDrawn = false;
+    static int previousMessageCount = -1;
 
     if (!screenDrawn) {
         resetState();
@@ -529,7 +562,7 @@ void runMainMenuScreen() {
         tft.setTextColor(ILI9341_WHITE);
         tft.setTextSize(2);
         tft.println("Main Menu");
-        
+
         bool isConnected = (WiFi.status() == WL_CONNECTED);
         int wifiSymbolX = tft.width() - 20;
         int wifiSymbolY = 30;
@@ -538,7 +571,37 @@ void runMainMenuScreen() {
         // If Wifi is connected its Blue, if not its white with an 'X' Symbol
         drawWiFiSymbol(wifiSymbolX, wifiSymbolY, isConnected);
 
+        int mailButtonX = wifiSymbolX - 100;
+        int mailButtonY = 10;
+        int mailButtonWidth = 70;
+        int mailButtonHeight = 30;
+
+        tft.fillRect(mailButtonX, mailButtonY, mailButtonWidth, mailButtonHeight, ILI9341_BLUE);
+        tft.setCursor(mailButtonX + 5, mailButtonY + 8);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print("Mail");
+
         screenDrawn = true;
+
+        previousMessageCount = -1;
+    }
+
+    int currentMessageCount = messageQueue.size();
+    if (currentMessageCount != previousMessageCount) {
+        int mailButtonX = tft.width() - 120;
+        int mailButtonY = 10;
+        int mailButtonWidth = 70;
+
+        tft.fillCircle(mailButtonX + mailButtonWidth - 5, mailButtonY + 5, 10, ILI9341_RED);
+
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        int16_t countX = mailButtonX + mailButtonWidth - 9;
+        int16_t countY = mailButtonY;
+        tft.setCursor(countX, countY);
+        tft.print(currentMessageCount);
+
+        previousMessageCount = currentMessageCount;
     }
 
     TSPoint p = ts.getPoint();
@@ -546,10 +609,24 @@ void runMainMenuScreen() {
         int calX = (p.y * xCalM) + xCalC;
         int calY = (p.x * yCalM) + yCalC;
 
-        int wifiButtonX = tft.width() - 80;
+        int mailButtonX = tft.width() - 120;
+        int mailButtonY = 10;
+        int mailButtonWidth = 70;
+        int mailButtonHeight = 30;
+
+        int wifiButtonX = tft.width() - 40;
         int wifiButtonY = 10;
-        if (calX > wifiButtonX && calX < wifiButtonX + 70 &&
-            calY > wifiButtonY && calY < wifiButtonY + 30) {
+        int wifiButtonWidth = 35;
+        int wifiButtonHeight = 20;
+
+        if (calX > mailButtonX && calX < mailButtonX + mailButtonWidth &&
+            calY > mailButtonY && calY < mailButtonY + mailButtonHeight) {
+            screenDrawn = false;
+            currentState = STATE_MAIL;
+        }
+
+        if (calX > wifiButtonX && calX < wifiButtonX + wifiButtonWidth &&
+            calY > wifiButtonY && calY < wifiButtonY + wifiButtonHeight) {
             screenDrawn = false;
             currentState = STATE_WIFI_SETUP;
         }
@@ -587,29 +664,149 @@ void drawWiFiSymbol(int centerX, int centerY, bool isConnected) {
 
 void resetState() {
   while (ts.getPoint().z > MINPRESSURE && ts.getPoint().z < MAXPRESSURE) {
+    delay(5);
   }
+  screenDrawn = false;
 }
 
 void onTextMessageChange() {
   textMessage.trim();
-    if (textMessage.isEmpty() || textMessage == "" || 
+  if (textMessage.isEmpty() || textMessage == "" || textMessage == "Message Denied." ||
       textMessage.startsWith("PMC received:") || textMessage == "\x1B") {
-      return;
+    return;
+  }
+
+  Serial.print("Message received: ");
+  Serial.println(textMessage);
+
+  messageQueue.push_back(textMessage);
+
+}
+
+void runMailScreen() {
+    if (messageQueue.empty()) {
+        tft.fillScreen(ILI9341_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("No messages.");
+        delay(2000);
+        currentState = STATE_MAIN_MENU;
+        screenDrawn = false;
+        return;
     }
 
-    Serial.print("Message received: ");
-    Serial.println(textMessage);
+    if (currentMessageIndex < 0) {
+        currentMessageIndex = 0;
+    }
 
-    String morseCode = textToMorse(textMessage);
-    Serial.print("Morse Code: ");
-    Serial.println(morseCode);
+    if (!screenDrawn) {
+        tft.fillScreen(ILI9341_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setCursor(10, 10);
+        tft.print("Message:");
+        tft.setCursor(10, 40);
+        tft.print(messageQueue[currentMessageIndex]);
 
-    //Light Morse Code on Pin D2 and speed 15 WPM
-    blinkMorse(morseCode, 2, 15);
+        int buttonWidth = 100;
+        int buttonHeight = 40;
+        int topButtonY = tft.height() - 120;
+        int bottomButtonY = tft.height() - 60;
 
-    textMessage = "PMC received: \"" + textMessage + "\" | Morse: " + morseCode;
+        int acceptX = 10;
+        int denyX = tft.width() - (buttonWidth + 10);
+        int prevX = 10;
+        int nextX = tft.width() - (buttonWidth + 10);
 
-    Serial.println("Acknowledgment sent to cloud.");
+        tft.fillRect(acceptX, topButtonY, buttonWidth, buttonHeight, ILI9341_GREEN);
+        tft.setCursor(acceptX + 20, topButtonY + 10);
+        tft.setTextColor(ILI9341_BLACK);
+        tft.print("Accept");
+
+        tft.fillRect(denyX, topButtonY, buttonWidth, buttonHeight, ILI9341_RED);
+        tft.setCursor(denyX + 20, topButtonY + 10);
+        tft.print("Deny");
+
+        if (messageQueue.size() > 1) {
+            tft.fillRect(prevX, bottomButtonY, buttonWidth, buttonHeight, ILI9341_BLUE);
+            tft.setCursor(prevX + 20, bottomButtonY + 10);
+            tft.print("Prev");
+
+            tft.fillRect(nextX, bottomButtonY, buttonWidth, buttonHeight, ILI9341_BLUE);
+            tft.setCursor(nextX + 20, bottomButtonY + 10);
+            tft.print("Next");
+        }
+
+        screenDrawn = true;
+    }
+
+    TSPoint p = ts.getPoint();
+    if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+        int calX = (p.y * xCalM) + xCalC;
+        int calY = (p.x * yCalM) + yCalC;
+
+        int buttonWidth = 100;
+        int buttonHeight = 40;
+        int topButtonY = tft.height() - 120;
+        int bottomButtonY = tft.height() - 60;
+
+        int acceptX = 10;
+        int denyX = tft.width() - (buttonWidth + 10);
+        int prevX = 10;
+        int nextX = tft.width() - (buttonWidth + 10);
+
+        if (calX > acceptX && calX < acceptX + buttonWidth &&
+            calY > topButtonY && calY < topButtonY + buttonHeight) {
+            String morseCode = textToMorse(messageQueue[currentMessageIndex]);
+
+            //Light Morse Code on Pin D2 and speed 15 WPM
+            blinkMorse(morseCode, 2, 15);
+            Serial.println("Acknowledgment sent to cloud.");
+            textMessage = "PMC received: \"" + messageQueue[currentMessageIndex] + "\" | Morse: " + morseCode;
+            ArduinoCloud.update();
+            messageQueue.erase(messageQueue.begin() + currentMessageIndex);
+
+            if (currentMessageIndex >= messageQueue.size()) {
+                currentMessageIndex--;
+            }
+            screenDrawn = false;
+            if (messageQueue.empty()) {
+                currentState = STATE_MAIN_MENU;
+            }
+        }
+
+        if (calX > denyX && calX < denyX + buttonWidth &&
+            calY > topButtonY && calY < topButtonY + buttonHeight) {
+            Serial.println("Message Denied");
+            textMessage = "Message Denied.";
+            ArduinoCloud.update();
+            messageQueue.erase(messageQueue.begin() + currentMessageIndex);
+            if (currentMessageIndex >= messageQueue.size()) {
+                currentMessageIndex--;
+            }
+            screenDrawn = false;
+            if (messageQueue.empty()) {
+                currentState = STATE_MAIN_MENU;
+            }
+        }
+
+        if (messageQueue.size() > 1 && calX > prevX && calX < prevX + buttonWidth &&
+            calY > bottomButtonY && calY < bottomButtonY + buttonHeight) {
+            if (currentMessageIndex > 0) {
+                currentMessageIndex--;
+                screenDrawn = false;
+            }
+        }
+
+        if (messageQueue.size() > 1 && calX > nextX && calX < nextX + buttonWidth &&
+            calY > bottomButtonY && calY < bottomButtonY + buttonHeight) {
+            if (currentMessageIndex < messageQueue.size() - 1) {
+                currentMessageIndex++;
+                screenDrawn = false;
+            }
+        }
+    }
 }
 
 void runEncodeScreen() {
