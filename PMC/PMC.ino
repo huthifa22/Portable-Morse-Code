@@ -1,6 +1,5 @@
 #include <WiFiNINA.h>
 #include "thingProperties.h"
-#include "config.h"
 #include "MorseUtils.h"
 #include "SPI.h"
 #include "Adafruit_GFX.h"
@@ -22,7 +21,7 @@
 #define XP 6
 
 // Touchscreen Calibration
-#define MINPRESSURE 5
+#define MINPRESSURE 2
 #define MAXPRESSURE 1000
 
 // Color Definitions
@@ -55,9 +54,13 @@ enum AppState {
   STATE_WIFI_CREDENTIALS,
   STATE_CONNECTION,
   STATE_MAIN_MENU,
-  STATE_ENCODE,
-  STATE_DECODE,
-  STATE_MAIL
+  STATE_MAIL,
+  STATE_GUIDE,
+  STATE_TEXT,
+  STATE_BUTTON,
+  STATE_TOOLS,
+  STATE_OTHER,
+  STATE_INFO
 };
 
 enum KeyboardState {
@@ -99,20 +102,37 @@ void loop() {
       runMainMenuScreen();
       break;
 
-    case STATE_ENCODE:
-      runEncodeScreen();
-      break;
-
-    case STATE_DECODE:
-      runDecodeScreen();
-      break;
-
     case STATE_MAIL:
       runMailScreen();
       break;
+
+    case STATE_GUIDE:
+      guideScreen();
+      break;
+
+    case STATE_TEXT:
+      runDummyState("Text");
+      break;
+
+    case STATE_BUTTON:
+      runDummyState("Button");
+      break;
+
+    case STATE_TOOLS:
+      runDummyState("Tools");
+      break;
+
+    case STATE_OTHER:
+      runDummyState("Other");
+      break;
+
+    case STATE_INFO:
+      runDummyState("Info");
+      break;
   }
-  // Checking for Cloud Messages if the Wifi and Cloud are connected
-    if (WiFi.status() == WL_CONNECTED && ArduinoCloud.connected()) {
+
+  // Checking for Cloud Messages if the Wi-Fi and Cloud are connected
+  if (WiFi.status() == WL_CONNECTED && ArduinoCloud.connected()) {
     ArduinoCloud.update();
   }
 }
@@ -157,6 +177,8 @@ void runWiFiSetupScreen() {
     const char* question = "Connect to Wi-Fi?";
     int16_t x1, y1;
     uint16_t w, h;
+
+    // Center the question text
     tft.getTextBounds(question, 0, 0, &x1, &y1, &w, &h);
     int16_t centerX = (tft.width() - w) / 2;
     int16_t centerY = (tft.height() / 4);
@@ -167,7 +189,10 @@ void runWiFiSetupScreen() {
     int16_t yesX = tft.width() / 4 - 50;
     int16_t yesY = centerY + 50;
     tft.fillRect(yesX, yesY, 100, 50, ILI9341_GREEN);
-    tft.setCursor(yesX + 20, yesY + 15);
+
+    // Calculate center of "Yes" text
+    tft.getTextBounds("Yes", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(yesX + (100 - w) / 2, yesY + (50 - h) / 2);
     tft.setTextColor(ILI9341_BLACK);
     tft.print("Yes");
 
@@ -175,7 +200,10 @@ void runWiFiSetupScreen() {
     int16_t noX = (tft.width() * 3 / 4) - 50;
     int16_t noY = centerY + 50;
     tft.fillRect(noX, noY, 100, 50, ILI9341_RED);
-    tft.setCursor(noX + 20, noY + 15);
+
+    // Calculate center of "No" text
+    tft.getTextBounds("No", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(noX + (100 - w) / 2, noY + (50 - h) / 2);
     tft.print("No");
 
     screenDrawn = true;
@@ -248,7 +276,7 @@ void runWiFiCredentialsScreen() {
         tft.setCursor(textX, textY);
         tft.setTextColor(ILI9341_WHITE);
         tft.print("EXIT");
-
+        tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
         drawKeyboard();
         screenDrawn = true;
     }
@@ -282,6 +310,8 @@ void runWiFiCredentialsScreen() {
                     passwordScrollOffset = max(0, (int)password.length() - 13);
                 }
             }
+
+            delay(80);
 
             tft.drawRect(150, 10, tft.width() - 160, 30, (selectedBox == "SSID") ? ILI9341_GREEN : ILI9341_WHITE);
             tft.drawRect(150, 50, tft.width() - 160, 30, (selectedBox == "Password") ? ILI9341_GREEN : ILI9341_WHITE);
@@ -456,103 +486,143 @@ void runConnectionState() {
     tft.setTextSize(2);
     tft.setTextColor(ILI9341_WHITE);
 
-    tft.setCursor(10, 10);
-    tft.print("Connecting to Wi-Fi...");
+    int messageX = 10;
+    int line1Y = 10;
+    int line2Y = 30;
 
+    int progressBarX = 20;
+    int progressBarY = tft.height() / 2 - 10;
+    int progressBarWidth = tft.width() - 40;
+    int progressBarHeight = 20;
+
+    tft.drawRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_WHITE);
+    tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+    tft.print("0%");
+
+    tft.setCursor(messageX, line1Y);
+    tft.print("Connecting to Wi-Fi...");
     int wifiRetryCount = 0;
     const int maxWiFiRetries = 5;
-    bool isWiFiRetryShown = false;
 
-    // Attempt to Connect to Wifi
     while (wifiRetryCount < maxWiFiRetries) {
         WiFi.disconnect();
         delay(500);
         WiFi.begin(wifiSSID, wifiPassword);
         delay(1500);
 
-        if (WiFi.status() == WL_CONNECTED) {
+        int wifiProgress = (progressBarWidth * (wifiRetryCount + 1)) / maxWiFiRetries;
+        tft.fillRect(progressBarX, progressBarY, wifiProgress, progressBarHeight, ILI9341_YELLOW);
 
-            tft.fillRect(10, 30, tft.width(), 20, ILI9341_BLACK);
-            tft.setCursor(10, 30);
+        int wifiPercentage = ((wifiRetryCount + 1) * 100) / maxWiFiRetries;
+        tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 60, 20, ILI9341_BLACK);
+        tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+        tft.print(wifiPercentage);
+        tft.print("%");
+
+        if (WiFi.status() == WL_CONNECTED) {
+            tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_GREEN);
+            tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 60, 20, ILI9341_BLACK);
+            tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+            tft.print("100%");
+
+            tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+            tft.setCursor(messageX, line1Y);
             tft.print("Wi-Fi Connected!");
+
+            delay(1000);
 
             WiFiConnectionHandler ArduinoIoTPreferredConnection(wifiSSID, wifiPassword);
             initProperties();
 
             ArduinoCloud.begin(ArduinoIoTPreferredConnection, false);
-            setDebugMessageLevel(2);     
+            setDebugMessageLevel(2);
             ArduinoCloud.printDebugInfo();
 
-            tft.fillRect(10, 50, tft.width(), 20, ILI9341_BLACK);
-            tft.setCursor(10, 50);
-            tft.print("Connecting to Cloud...");
+            tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_BLACK);
+            tft.drawRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_WHITE);
 
-            bool isCloudRetryShown = false;
+            tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+            tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+            tft.print("0%");
+
+            tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+            tft.setCursor(messageX, line1Y);
+            tft.print("Connecting to Cloud...");
+            delay(500);
+
             int cloudRetryCount = 0;
             const int maxCloudRetries = 10;
+            int cloudProgressStep = progressBarWidth / maxCloudRetries;
 
-            // Once Wifi is connected, connect to ArduinoCLoud with entered Wifi Credentials 
-            while (!ArduinoCloud.connected() && cloudRetryCount < maxCloudRetries) {
+            while (cloudRetryCount < maxCloudRetries) {
                 ArduinoCloud.update();
                 delay(1000);
 
-                if (!isCloudRetryShown) {
-                    tft.fillRect(10, 70, tft.width(), 20, ILI9341_BLACK);
-                    tft.setCursor(10, 70);
-                    tft.print("Retry Cloud: ");
-                    isCloudRetryShown = true;
-                }
+                int cloudProgress = cloudProgressStep * (cloudRetryCount + 1);
+                tft.fillRect(progressBarX, progressBarY, cloudProgress, progressBarHeight, ILI9341_YELLOW);
 
-                tft.fillRect(150, 70, 50, 20, ILI9341_BLACK);
-                tft.setCursor(150, 70);
-                tft.print(cloudRetryCount + 1);
+                int cloudPercentage = ((cloudRetryCount + 1) * 100) / maxCloudRetries;
+                tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+                tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+                tft.print(cloudPercentage);
+                tft.print("%");
+
+                if (ArduinoCloud.connected()) {
+                    tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_GREEN);
+                    tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+                    tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+                    tft.print("100%");
+
+                    tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+                    tft.setCursor(messageX, line1Y);
+                    tft.print("Wi-Fi and Cloud Connected");
+
+                    Serial.println("Device connected to Arduino Cloud:");
+                    Serial.print("Device ID: ");
+                    Serial.println(ArduinoCloud.getDeviceId());
+
+                    delay(2000);
+                    currentState = STATE_MAIN_MENU;
+                    return;
+                }
 
                 cloudRetryCount++;
             }
 
-            if (ArduinoCloud.connected()) {
-                tft.fillRect(10, 70, tft.width(), 20, ILI9341_BLACK);
-                tft.setCursor(10, 70);
-                tft.print("Cloud Connected!");
-
-                Serial.println("Device connected to Arduino Cloud:");
-                Serial.print("Device ID: ");
-                Serial.println(ArduinoCloud.getDeviceId());
-
-                delay(2000);
-                currentState = STATE_MAIN_MENU;
-                return;
-            } else {
-                tft.fillRect(10, 70, tft.width(), 20, ILI9341_BLACK);
-                tft.setCursor(10, 70);
-                tft.print("Cloud Failed!");
-
-                delay(2000);
-                currentState = STATE_MAIN_MENU;
-                return;
-            }
+            tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_RED);
+            tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+            tft.setCursor(messageX, line1Y);
+            tft.print("Cloud Connection Failed.");
+            delay(2000);
+            currentState = STATE_MAIN_MENU;
+            return;
         }
-
-        if (!isWiFiRetryShown) {
-            tft.setCursor(10, 30);
-            tft.print("Retry Wi-Fi: ");
-            isWiFiRetryShown = true;
-        }
-        tft.fillRect(150, 30, 50, 20, ILI9341_BLACK);
-        tft.setCursor(150, 30);
-        tft.print(wifiRetryCount + 1);
 
         wifiRetryCount++;
     }
 
-    tft.setCursor(10, 70);
-    tft.print("Wi-Fi Failed!");
+    tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_RED);
+    tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+    tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+    tft.setCursor(messageX, line1Y);
+    tft.print("Wi-Fi Connection Failed.");
     delay(2000);
     currentState = STATE_MAIN_MENU;
 }
 
 void runMainMenuScreen() {
     static int previousMessageCount = -1;
+
+    const uint16_t colors[] = {
+      tft.color565(180, 200, 220),
+      tft.color565(180, 200, 220), 
+      tft.color565(180, 200, 220), 
+      tft.color565(180, 200, 220), 
+      tft.color565(180, 200, 220), 
+      tft.color565(180, 200, 220)
+    };
+
+    const uint16_t textColor = ILI9341_BLACK;
 
     if (!screenDrawn) {
         resetState();
@@ -565,7 +635,7 @@ void runMainMenuScreen() {
 
         bool isConnected = (WiFi.status() == WL_CONNECTED);
         int wifiSymbolX = tft.width() - 20;
-        int wifiSymbolY = 30;
+        int wifiSymbolY = 35;
 
         // Wifi button on the Top right of the Main Menu
         // If Wifi is connected its Blue, if not its white with an 'X' Symbol
@@ -580,6 +650,31 @@ void runMainMenuScreen() {
         tft.setCursor(mailButtonX + 5, mailButtonY + 8);
         tft.setTextColor(ILI9341_WHITE);
         tft.print("Mail");
+
+        // 6 Tiles
+        int boxWidth = (tft.width() - 40) / 3;
+        int boxHeight = 60;
+        int boxSpacing = 10;
+        int startY = 80;
+        const char* labels[] = {"Guide", "Text", "Button", "Tools", "Other", "Info"};
+
+        for (int i = 0; i < 6; ++i) {
+            int row = i / 3;
+            int col = i % 3;
+            int boxX = 10 + col * (boxWidth + boxSpacing);
+            int boxY = startY + row * (boxHeight + boxSpacing);
+
+            tft.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 8, colors[i]);
+            tft.drawRoundRect(boxX, boxY, boxWidth, boxHeight, 8, ILI9341_WHITE);
+
+            int16_t x1, y1;
+            uint16_t w, h;
+            tft.getTextBounds(labels[i], 0, 0, &x1, &y1, &w, &h);
+            tft.setCursor(boxX + (boxWidth - w) / 2, boxY + (boxHeight - h) / 2);
+            tft.setTextColor(textColor);
+            tft.setTextSize(2);
+            tft.print(labels[i]);
+        }
 
         screenDrawn = true;
 
@@ -630,12 +725,38 @@ void runMainMenuScreen() {
             screenDrawn = false;
             currentState = STATE_WIFI_SETUP;
         }
+
+        // Check if a tile is clicked
+        int boxWidth = (tft.width() - 40) / 3;
+        int boxHeight = 60;
+        int boxSpacing = 10;
+        int startY = 80;
+
+        for (int i = 0; i < 6; ++i) {
+            int row = i / 3;
+            int col = i % 3;
+            int boxX = 10 + col * (boxWidth + boxSpacing);
+            int boxY = startY + row * (boxHeight + boxSpacing);
+
+            if (calX > boxX && calX < boxX + boxWidth && calY > boxY && calY < boxY + boxHeight) {
+                screenDrawn = false;
+                switch (i) {
+                    case 0: currentState = STATE_GUIDE; break;
+                    case 1: currentState = STATE_TEXT; break;
+                    case 2: currentState = STATE_BUTTON; break;
+                    case 3: currentState = STATE_TOOLS; break;
+                    case 4: currentState = STATE_OTHER; break;
+                    case 5: currentState = STATE_INFO; break;
+                }
+                return;
+            }
+        }
     }
 }
 
 void drawWiFiSymbol(int centerX, int centerY, bool isConnected) {
-    uint16_t centerDotColor = isConnected ? ILI9341_BLUE : ILI9341_WHITE;
-    uint16_t arcColor = isConnected ? ILI9341_BLUE : ILI9341_WHITE;
+    uint16_t centerDotColor = isConnected ? tft.color565(0, 255, 0) : ILI9341_WHITE;
+    uint16_t arcColor = isConnected ? tft.color565(0, 255, 0) : ILI9341_WHITE;
 
     tft.fillCircle(centerX, centerY - 4, 2, centerDotColor);
 
@@ -685,14 +806,7 @@ void onTextMessageChange() {
 
 void runMailScreen() {
     if (messageQueue.empty()) {
-        tft.fillScreen(ILI9341_BLACK);
-        tft.setTextSize(2);
-        tft.setTextColor(ILI9341_WHITE);
-        tft.setCursor(10, 10);
-        tft.print("No messages.");
-        delay(2000);
-        currentState = STATE_MAIN_MENU;
-        screenDrawn = false;
+        noMailPopup();
         return;
     }
 
@@ -809,14 +923,179 @@ void runMailScreen() {
     }
 }
 
-void runEncodeScreen() {
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setCursor(10, 10);
-  tft.print("Encode Screen");
+void noMailPopup() {
+    int popupWidth = tft.width() - 140;
+    int popupHeight = 80;
+    int popupX = (tft.width() - popupWidth) / 2;
+    int popupY = (tft.height() - popupHeight) / 2;
+
+    int okButtonWidth = 60;
+    int okButtonHeight = 30;
+    int okButtonX = popupX + (popupWidth - okButtonWidth) / 2;
+    int okButtonY = popupY + popupHeight - okButtonHeight - 10;
+
+    tft.fillRect(popupX, popupY, popupWidth, popupHeight, ILI9341_BLACK);
+    tft.drawRect(popupX, popupY, popupWidth, popupHeight, ILI9341_WHITE);
+
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    int textX = popupX + (popupWidth - (7 * 2 * 6)) / 2;
+    int textY = popupY + 15;
+    tft.setCursor(textX, textY);
+    tft.print("No Mail.");
+
+    tft.fillRect(okButtonX, okButtonY, okButtonWidth, okButtonHeight, ILI9341_RED);
+    tft.drawRect(okButtonX, okButtonY, okButtonWidth, okButtonHeight, ILI9341_WHITE);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(okButtonX + 12, okButtonY + 8);
+    tft.print("OK");
+
+    while (true) {
+        TSPoint p = ts.getPoint();
+        if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+            int calX = (p.y * xCalM) + xCalC;
+            int calY = (p.x * yCalM) + yCalC;
+
+            if (calX > okButtonX && calX < okButtonX + okButtonWidth &&
+                calY > okButtonY && calY < okButtonY + okButtonHeight) {
+                delay(200);
+                screenDrawn = false;
+                currentState = STATE_MAIN_MENU;
+                return;
+            }
+        }
+    }
 }
 
-void runDecodeScreen() {
-  tft.fillScreen(ILI9341_BLACK);
-  tft.setCursor(10, 10);
-  tft.print("Decode Screen");
+void guideScreen() {
+    static bool isShowingNumbers = false;
+
+    if (!screenDrawn) {
+        resetState();
+        tft.fillScreen(ILI9341_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ILI9341_WHITE);
+
+        if (!isShowingNumbers) {
+            const char* morseCodes[] = {
+                ".-", "-...", "-.-.", "-..", ".", "..-.", "--.", "....", "..", ".---",
+                "-.-", ".-..", "--", "-.", "---", ".--.", "--.-", ".-.", "...", "-",
+                "..-", "...-", ".--", "-..-", "-.--", "--.."
+            };
+            const char letters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+            int colWidth = tft.width() / 3;
+            int rowHeight = 20;
+            int colX[] = {10, colWidth + 10, 2 * colWidth + 10};
+            int startY = 10;
+
+            int index = 0;
+            for (int col = 0; col < 3; col++) {
+                int currentY = startY;
+                for (int row = 0; row < 9 && index < 26; row++) {
+                    tft.setCursor(colX[col], currentY);
+                    tft.print(letters[index]);
+                    tft.print(": ");
+                    tft.print(morseCodes[index]);
+                    currentY += rowHeight;
+                    index++;
+                }
+            }
+        } else {
+            const char* morseCodes[] = {
+                "-----", ".----", "..---", "...--", "....-", ".....",
+                "-....", "--...", "---..", "----."
+            };
+            const char numbers[] = "0123456789";
+
+            int colWidth = tft.width() / 2;
+            int rowHeight = 20;
+            int colX[] = {10, colWidth + 10};
+            int startY = 10;
+
+            int index = 0;
+            for (int col = 0; col < 2; col++) {
+                int currentY = startY;
+                for (int row = 0; row < 5 && index < 10; row++) {
+                    tft.setCursor(colX[col], currentY);
+                    tft.print(numbers[index]);
+                    tft.print(": ");
+                    tft.print(morseCodes[index]);
+                    currentY += rowHeight;
+                    index++;
+                }
+            }
+        }
+
+        int toggleButtonX = 10;
+        int toggleButtonY = tft.height() - 40;
+        int toggleButtonWidth = 100;
+        int toggleButtonHeight = 30;
+
+        tft.fillRect(toggleButtonX, toggleButtonY, toggleButtonWidth, toggleButtonHeight, ILI9341_BLUE);
+        tft.drawRect(toggleButtonX, toggleButtonY, toggleButtonWidth, toggleButtonHeight, ILI9341_WHITE);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setCursor(toggleButtonX + 10, toggleButtonY + 8);
+        tft.print(isShowingNumbers ? "Letters" : "Numbers");
+
+        int exitButtonX = tft.width() - 110;
+        int exitButtonY = tft.height() - 40;
+        int exitButtonWidth = 100;
+        int exitButtonHeight = 30;
+
+        tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
+        tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setCursor(exitButtonX + 25, exitButtonY + 8);
+        tft.print("EXIT");
+
+        screenDrawn = true;
+    }
+
+    TSPoint p = ts.getPoint();
+    if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+        int calX = (p.y * xCalM) + xCalC;
+        int calY = (p.x * yCalM) + yCalC;
+
+        int toggleButtonX = 10;
+        int toggleButtonY = tft.height() - 40;
+        int toggleButtonWidth = 100;
+        int toggleButtonHeight = 30;
+        if (calX > toggleButtonX && calX < toggleButtonX + toggleButtonWidth &&
+            calY > toggleButtonY && calY < toggleButtonY + toggleButtonHeight) {
+            screenDrawn = false;
+            isShowingNumbers = !isShowingNumbers;
+            return;
+        }
+
+        int exitButtonX = tft.width() - 110;
+        int exitButtonY = tft.height() - 40;
+        int exitButtonWidth = 100;
+        int exitButtonHeight = 30;
+        if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth &&
+            calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+            screenDrawn = false;
+            currentState = STATE_MAIN_MENU;
+            return;
+        }
+    }
+}
+
+void runDummyState(const char* stateName) {
+    if (!screenDrawn) {
+        resetState();
+        tft.fillScreen(ILI9341_BLACK);
+        tft.setTextSize(2);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setCursor(10, 10);
+        tft.print(stateName);
+        tft.print(" Screen");
+        screenDrawn = true;
+    }
+
+    TSPoint p = ts.getPoint();
+    if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+        screenDrawn = false;
+        currentState = STATE_MAIN_MENU;
+    }
 }
