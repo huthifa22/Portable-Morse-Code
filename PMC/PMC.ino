@@ -48,6 +48,8 @@ String textMessage = "";
 std::vector<String> messageQueue;
 int currentMessageIndex = -1; 
 
+int WPM = 20;
+
 enum AppState {
   STATE_STARTUP,
   STATE_WIFI_SETUP,
@@ -56,8 +58,8 @@ enum AppState {
   STATE_MAIN_MENU,
   STATE_MAIL,
   STATE_GUIDE,
-  STATE_TEXT,
-  STATE_BUTTON,
+  STATE_ENCODE,
+  STATE_DECODE,
   STATE_TOOLS,
   STATE_OTHER,
   STATE_INFO
@@ -110,12 +112,12 @@ void loop() {
       guideScreen();
       break;
 
-    case STATE_TEXT:
-      runDummyState("Text");
+    case STATE_ENCODE:
+      runEncodeState();
       break;
 
-    case STATE_BUTTON:
-      runDummyState("Button");
+    case STATE_DECODE:
+      runDummyState("Decode");
       break;
 
     case STATE_TOOLS:
@@ -359,12 +361,20 @@ void runWiFiCredentialsScreen() {
 
 void drawKeyboard() {
     const char* keys;
-    if (currentKeyboardState == STATE_UPPERCASE) {
+    if (currentState == STATE_ENCODE) {
         keys = "1234567890QWERTYUIOPASDFGHJKLZXCVBNM";
-    } else if (currentKeyboardState == STATE_LOWERCASE) {
-        keys = "1234567890qwertyuiopasdfghjklzxcvbnm";
     } else {
-        keys = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/\\`~";
+        switch (currentKeyboardState) {
+            case STATE_UPPERCASE:
+                keys = "1234567890QWERTYUIOPASDFGHJKLZXCVBNM";
+                break;
+            case STATE_LOWERCASE:
+                keys = "1234567890qwertyuiopasdfghjklzxcvbnm";
+                break;
+            case STATE_SYMBOLS:
+                keys = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/\\`~";
+                break;
+        }
     }
 
     int xStart = 5, yStart = tft.height() - (5 + 4 * (keyHeight + keySpacing));
@@ -393,6 +403,7 @@ void drawKeyboard() {
     tft.fillRect(spaceX, spaceY, keyWidth, keyHeight, ILI9341_GRAY);
 
     // Draw symbol toggle button; U = Uppercase, L = Lowercase, S = Symbol
+    if (currentState != STATE_ENCODE) {
     int symbolX = xStart + 7 * (keyWidth + keySpacing);
     tft.fillRect(symbolX, spaceY, keyWidth, keyHeight, ILI9341_YELLOW);
     tft.setCursor(symbolX + 5, spaceY + 5);
@@ -402,6 +413,7 @@ void drawKeyboard() {
         tft.print("L");
     } else {
         tft.print("S");
+    }
     }
 
     // Draw backspace button
@@ -455,15 +467,17 @@ char getKeyFromCoords(int calX, int calY) {
     // Detect symbol toggle
     int symbolX = xStart + 7 * (keyWidth + keySpacing);
     if (calX > symbolX && calX < symbolX + keyWidth && calY > spaceY && calY < spaceY + keyHeight) {
-        if (currentKeyboardState == STATE_UPPERCASE) {
-            currentKeyboardState = STATE_LOWERCASE;
+      if (currentState != STATE_ENCODE) {
+          if (currentKeyboardState == STATE_UPPERCASE) {
+              currentKeyboardState = STATE_LOWERCASE;
         } else if (currentKeyboardState == STATE_LOWERCASE) {
             currentKeyboardState = STATE_SYMBOLS;
         } else {
             currentKeyboardState = STATE_UPPERCASE;
         }
         drawKeyboard();
-        return '\0';
+      }
+      return '\0';
     }
 
     // Detect backspace
@@ -656,7 +670,7 @@ void runMainMenuScreen() {
         int boxHeight = 60;
         int boxSpacing = 10;
         int startY = 80;
-        const char* labels[] = {"Guide", "Text", "Button", "Tools", "Other", "Info"};
+        const char* labels[] = {"Guide", "Encode", "Decode", "Tools", "Other", "Info"};
 
         for (int i = 0; i < 6; ++i) {
             int row = i / 3;
@@ -742,8 +756,8 @@ void runMainMenuScreen() {
                 screenDrawn = false;
                 switch (i) {
                     case 0: currentState = STATE_GUIDE; break;
-                    case 1: currentState = STATE_TEXT; break;
-                    case 2: currentState = STATE_BUTTON; break;
+                    case 1: currentState = STATE_ENCODE; break;
+                    case 2: currentState = STATE_DECODE; break;
                     case 3: currentState = STATE_TOOLS; break;
                     case 4: currentState = STATE_OTHER; break;
                     case 5: currentState = STATE_INFO; break;
@@ -874,8 +888,8 @@ void runMailScreen() {
             calY > topButtonY && calY < topButtonY + buttonHeight) {
             String morseCode = textToMorse(messageQueue[currentMessageIndex]);
 
-            //Light Morse Code on Pin D2 and speed 15 WPM
-            blinkMorse(morseCode, 2, 15);
+            //Light Morse Code on Pin D2
+            blinkMorse(morseCode, 2, WPM);
             Serial.println("Acknowledgment sent to cloud.");
             textMessage = "PMC received: \"" + messageQueue[currentMessageIndex] + "\" | Morse: " + morseCode;
             ArduinoCloud.update();
@@ -1078,6 +1092,215 @@ void guideScreen() {
             currentState = STATE_MAIN_MENU;
             return;
         }
+    }
+}
+
+void runEncodeState() {
+    static String inputText = "";
+    static String morseText = "";
+    const int inputBoxHeight = 30;
+    const int outputBoxHeight = 30;
+    const int textAreaY = 10;
+    const int morseAreaY = textAreaY + inputBoxHeight + 10;
+    const int buttonWidth = 30;
+    const int buttonHeight = inputBoxHeight;
+    const int boxWidth = tft.width() - 70;
+    const int maxInputChars = 32;
+    const int visibleChars = boxWidth / 12;
+    static int inputScrollOffset = 0;
+    static int morseScrollOffset = 0;
+    static bool isTopBoxSelected = true;
+    static bool topPlaceholderActive = true;
+    static bool bottomPlaceholderActive = true;
+
+    if (!screenDrawn) {
+        resetState();
+        tft.fillScreen(ILI9341_BLACK);
+        uint16_t topColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
+        uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
+        tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, topColor);
+        tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, textAreaY + 8);
+        tft.setTextSize(2);
+        if (topPlaceholderActive && inputText.length() == 0) {
+            tft.setTextColor(ILI9341_LIGHTGREY);
+            tft.print("Enter Message");
+        } else {
+            tft.setTextColor(ILI9341_WHITE);
+            tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+        }
+        tft.drawRect(5, morseAreaY, boxWidth, outputBoxHeight, bottomColor);
+        tft.fillRect(6, morseAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, morseAreaY + 8);
+        tft.setTextSize(2);
+        if (bottomPlaceholderActive && morseText.length() == 0) {
+            tft.setTextColor(ILI9341_LIGHTGREY);
+            tft.print("Encoded Message");
+        } else {
+            tft.setTextColor(ILI9341_WHITE);
+            tft.print(morseText.substring(morseScrollOffset, morseScrollOffset + visibleChars));
+        }
+        tft.fillRect(boxWidth + 10, textAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+        tft.drawRect(boxWidth + 10, textAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+        tft.setCursor(boxWidth + 10 + (buttonWidth - 12) / 2, textAreaY + (buttonHeight - 16) / 2);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.print("<");
+        tft.fillRect(boxWidth + 40, textAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+        tft.drawRect(boxWidth + 40, textAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+        tft.setCursor(boxWidth + 40 + (buttonWidth - 12) / 2, textAreaY + (buttonHeight - 16) / 2);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.print(">");
+        tft.fillRect(boxWidth + 10, morseAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+        tft.drawRect(boxWidth + 10, morseAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+        tft.setCursor(boxWidth + 10 + (buttonWidth - 12) / 2, morseAreaY + (buttonHeight - 16) / 2);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.print("<");
+        tft.fillRect(boxWidth + 40, morseAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+        tft.drawRect(boxWidth + 40, morseAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+        tft.setCursor(boxWidth + 40 + (buttonWidth - 12) / 2, morseAreaY + (buttonHeight - 16) / 2);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.print(">");
+        int exitButtonX = 5;
+        int exitButtonY = 85;
+        int exitButtonWidth = 60;
+        int exitButtonHeight = 25;
+        tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
+        int16_t textX = exitButtonX + (exitButtonWidth - 48) / 2;
+        int16_t textY = exitButtonY + (exitButtonHeight - 16) / 2 + 2;
+        tft.setCursor(textX, textY);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.setTextSize(2);
+        tft.print("EXIT");
+        tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+        drawKeyboard();
+        screenDrawn = true;
+    }
+
+    TSPoint p = ts.getPoint();
+    if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+        int calX = (p.y * xCalM) + xCalC;
+        int calY = (p.x * yCalM) + yCalC;
+        if (calX >= 5 && calX <= 5 + boxWidth && calY >= textAreaY && calY <= textAreaY + inputBoxHeight) {
+            isTopBoxSelected = true;
+            if (topPlaceholderActive && inputText.length() == 0) {
+                topPlaceholderActive = false;
+            }
+        }
+        if (calX >= 5 && calX <= 5 + boxWidth && calY >= morseAreaY && calY <= morseAreaY + outputBoxHeight) {
+            isTopBoxSelected = false;
+            if (bottomPlaceholderActive && morseText.length() == 0) {
+                bottomPlaceholderActive = false;
+            }
+        }
+        if (calX > boxWidth + 10 && calX < boxWidth + 40 && calY > textAreaY && calY < textAreaY + buttonHeight) {
+            isTopBoxSelected = true;
+            if (inputScrollOffset > 0) {
+                inputScrollOffset--;
+                tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+                tft.setCursor(10, textAreaY + 8);
+                tft.setTextColor(ILI9341_WHITE);
+                tft.setTextSize(2);
+                tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+            }
+        }
+        if (calX > boxWidth + 10 && calX < boxWidth + 40 && calY > morseAreaY && calY < morseAreaY + buttonHeight) {
+            isTopBoxSelected = false;
+            if (morseScrollOffset > 0) {
+                morseScrollOffset--;
+                tft.fillRect(6, morseAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+                tft.setCursor(10, morseAreaY + 8);
+                tft.setTextColor(ILI9341_WHITE);
+                tft.setTextSize(2);
+                tft.print(morseText.substring(morseScrollOffset, morseScrollOffset + visibleChars));
+            }
+        }
+        if (calX > boxWidth + 40 && calX < boxWidth + 70 && calY > textAreaY && calY < textAreaY + buttonHeight) {
+            isTopBoxSelected = true;
+            int maxOffset = max(0, (int)inputText.length() - visibleChars);
+            if (inputScrollOffset < maxOffset) {
+                inputScrollOffset++;
+                tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+                tft.setCursor(10, textAreaY + 8);
+                tft.setTextColor(ILI9341_WHITE);
+                tft.setTextSize(2);
+                tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+            }
+        }
+        if (calX > boxWidth + 40 && calX < boxWidth + 70 && calY > morseAreaY && calY < morseAreaY + buttonHeight) {
+            isTopBoxSelected = false;
+            int maxOffset = max(0, (int)morseText.length() - visibleChars);
+            if (morseScrollOffset < maxOffset) {
+                morseScrollOffset++;
+                tft.fillRect(6, morseAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+                tft.setCursor(10, morseAreaY + 8);
+                tft.setTextColor(ILI9341_WHITE);
+                tft.setTextSize(2);
+                tft.print(morseText.substring(morseScrollOffset, morseScrollOffset + visibleChars));
+            }
+        }
+        char key = getKeyFromCoords(calX, calY);
+        if (key) {
+            if (key == '>') {
+                morseText = textToMorse(inputText);
+                blinkMorse(morseText, 2, WPM);
+                isTopBoxSelected = false;
+                if (bottomPlaceholderActive && morseText.length() > 0) {
+                    bottomPlaceholderActive = false;
+                }
+            } else if (isTopBoxSelected) {
+                if (topPlaceholderActive) {
+                    topPlaceholderActive = false;
+                    inputText = "";
+                }
+                if (key == '<') {
+                    if (!inputText.isEmpty()) {
+                        inputText.remove(inputText.length() - 1);
+                    }
+                } else if (inputText.length() < maxInputChars) {
+                    inputText += key;
+                }
+                morseText = textToMorse(inputText);
+            }
+            inputScrollOffset = max(0, (int)inputText.length() - visibleChars);
+            tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+            tft.setCursor(10, textAreaY + 8);
+            tft.setTextSize(2);
+            if (topPlaceholderActive && inputText.length() == 0) {
+                tft.setTextColor(ILI9341_LIGHTGREY);
+                tft.print("Enter Message");
+            } else {
+                tft.setTextColor(ILI9341_WHITE);
+                tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+            }
+            morseScrollOffset = max(0, (int)morseText.length() - visibleChars);
+            tft.fillRect(6, morseAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+            tft.setCursor(10, morseAreaY + 8);
+            tft.setTextSize(2);
+            if (bottomPlaceholderActive && morseText.length() == 0) {
+                tft.setTextColor(ILI9341_LIGHTGREY);
+                tft.print("Encoded Message");
+            } else {
+                tft.setTextColor(ILI9341_WHITE);
+                tft.print(morseText.substring(morseScrollOffset, morseScrollOffset + visibleChars));
+            }
+        }
+        int exitButtonX = 5;
+        int exitButtonY = 85;
+        int exitButtonWidth = 60;
+        int exitButtonHeight = 25;
+        if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth &&
+            calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+            screenDrawn = false;
+            currentState = STATE_MAIN_MENU;
+        }
+        uint16_t topColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
+        uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
+        tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, topColor);
+        tft.drawRect(5, morseAreaY, boxWidth, outputBoxHeight, bottomColor);
     }
 }
 
