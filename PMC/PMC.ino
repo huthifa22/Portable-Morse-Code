@@ -6,6 +6,7 @@
 #include "Adafruit_ILI9341.h"
 #include "TouchScreen.h"
 #include <vector>
+#include <Fonts/FreeSansBoldOblique18pt7b.h>
 
 // TFT Display SPI Pins
 #define TFT_CLK 13
@@ -140,31 +141,71 @@ void loop() {
 }
 
 void runStartupScreen() {
+    if (!screenDrawn) {
+        resetState();
 
-  if (!screenDrawn) {
-    resetState();
+        tft.fillScreen(ILI9341_BLACK);
+        tft.setFont(&FreeSansBoldOblique18pt7b);
+        tft.setTextColor(tft.color565(0, 255, 0));
 
-    tft.fillScreen(ILI9341_BLACK);
-    tft.setTextSize(8);
-    tft.setTextColor(tft.color565(139, 0, 0));
+        const char* text = "PMC";
+        int16_t x1, y1;
+        uint16_t w, h;
+        tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
 
-    const char* text = "PMC";
-    int16_t x1, y1;
-    uint16_t w, h;
-    tft.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+        int16_t centerX = (tft.width() - w) / 2;
+        int16_t centerY = (tft.height() - h) / 2;
 
-    int16_t centerX = (tft.width() - w) / 2;
-    int16_t centerY = (tft.height() - h) / 2;
+        for (int radius = 8; radius >= 0; radius -= 2) {
+            tft.setTextColor(tft.color565(0, (radius * 255) / 8, 0));
+            tft.setCursor(centerX - radius, centerY - radius);
+            tft.print(text);
+            delay(110);
+        }
 
-    tft.setCursor(centerX, centerY);
-    tft.print(text);
+        tft.setTextColor(tft.color565(0, 255, 0));
+        tft.setCursor(centerX, centerY);
+        tft.print(text);
 
-    screenDrawn = true;
-  }
+        int progressBarX = 20;
+        int progressBarY = tft.height() - 50;
+        int progressBarWidth = tft.width() - 40;
+        int progressBarHeight = 20;
 
-  screenDrawn = false;
-  delay(1000);
-  currentState = STATE_MAIN_MENU;
+        tft.drawRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_WHITE);
+
+        for (int progress = 0; progress <= progressBarWidth - 4; progress += 7) {
+            uint16_t gradientColor = tft.color565(0, (progress * 255) / (progressBarWidth - 4), 0);
+            tft.fillRect(progressBarX + 2, progressBarY + 2, progress, progressBarHeight - 4, gradientColor);
+
+            int percent = min(100, (progress * 100) / (progressBarWidth - 4));
+            tft.fillRect(progressBarX, progressBarY - 40, progressBarWidth, 30, ILI9341_BLACK);
+            tft.setFont();
+            tft.setTextSize(2);
+            tft.setCursor(progressBarX + (progressBarWidth / 2) - 20, progressBarY - 30);
+            tft.setTextColor(ILI9341_WHITE);
+            tft.print(percent);
+            tft.print("%");
+
+            delay(20);
+        }
+
+        tft.fillRect(progressBarX + 2, progressBarY + 2, progressBarWidth - 4, progressBarHeight - 4, tft.color565(0, 255, 0));
+        tft.fillRect(progressBarX, progressBarY - 40, progressBarWidth, 30, ILI9341_BLACK);
+        tft.setFont();
+        tft.setTextSize(2);
+        tft.setCursor(progressBarX + (progressBarWidth / 2) - 20, progressBarY - 30);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print("100%");
+
+        tft.setFont();
+        screenDrawn = true;
+
+        delay(500);
+    }
+
+    screenDrawn = false;
+    currentState = STATE_MAIN_MENU;
 }
 
 void runWiFiSetupScreen() {
@@ -313,7 +354,7 @@ void runWiFiCredentialsScreen() {
                 }
             }
 
-            delay(80);
+            delay(50);
 
             tft.drawRect(150, 10, tft.width() - 160, 30, (selectedBox == "SSID") ? ILI9341_GREEN : ILI9341_WHITE);
             tft.drawRect(150, 50, tft.width() - 160, 30, (selectedBox == "Password") ? ILI9341_GREEN : ILI9341_WHITE);
@@ -1265,6 +1306,9 @@ void runEncodeState() {
                 }
                 morseText = textToMorse(inputText);
             }
+
+            delay(50);
+
             inputScrollOffset = max(0, (int)inputText.length() - visibleChars);
             tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
             tft.setCursor(10, textAreaY + 8);
