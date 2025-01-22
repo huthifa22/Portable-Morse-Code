@@ -50,6 +50,7 @@ char wifiPassword[32] = "";
 String textMessage = "";
 std::vector<String> messageQueue;
 int currentMessageIndex = -1;
+static bool previousWiFiStatus = false;
 
 int WPM = 20;
 
@@ -276,8 +277,8 @@ void runWiFiSetupScreen() {
 
 void runWiFiCredentialsScreen() {
   static bool screenDrawn = false;
-  static String ssid = "test";
-  static String password = "test";
+  static String ssid = "iPhone";
+  static String password = "coolwifi";
   const int inputBoxHeight = 30;
   const int outputBoxHeight = 30;
   const int textAreaY = 10;
@@ -846,6 +847,7 @@ void runMainMenuScreen() {
     // Wifi button on the Top right of the Main Menu
     // If Wifi is connected its Blue, if not its white with an 'X' Symbol
     drawWiFiSymbol(wifiSymbolX, wifiSymbolY, isConnected);
+    previousWiFiStatus = isConnected;
 
     int mailButtonX = wifiSymbolX - 100;
     int mailButtonY = 10;
@@ -885,6 +887,12 @@ void runMainMenuScreen() {
     screenDrawn = true;
 
     previousMessageCount = -1;
+  }
+
+  bool isConnected = (WiFi.status() == WL_CONNECTED);
+  if (isConnected != previousWiFiStatus) {
+    drawWiFiSymbol(tft.width() - 20, 35, isConnected);
+    previousWiFiStatus = isConnected;
   }
 
   int currentMessageCount = messageQueue.size();
