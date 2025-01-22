@@ -116,6 +116,7 @@ void loop() {
       break;
 
     case STATE_ENCODE:
+      currentKeyboardState = STATE_UPPERCASE;
       runEncodeState();
       break;
 
@@ -536,7 +537,7 @@ void drawKeyboard() {
         keys = "1234567890qwertyuiopasdfghjklzxcvbnm";
         break;
       case STATE_SYMBOLS:
-        keys = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/\\`~";
+        keys = "!@#$%^&*()_+-=[]{}|;:'\",.?/\\`~";
         break;
     }
   }
@@ -550,6 +551,8 @@ void drawKeyboard() {
   int totalSpacing = (keysPerRow - 1) * keySpacing;
   int usableWidth = screenW - totalSpacing;
   dynamicKeyWidth = usableWidth / keysPerRow;
+  int charWidth = 6 * 2;
+  int charHeight = 8 * 2;
 
   tft.fillRect(0, yStart, tft.width(), screenH - yStart, ILI9341_BLACK);
 
@@ -560,7 +563,11 @@ void drawKeyboard() {
       int y = yStart + row * (keyHeight + keySpacing);
 
       tft.fillRect(x, y, dynamicKeyWidth, keyHeight, ILI9341_BLUE);
-      tft.setCursor(x + (dynamicKeyWidth / 5), y + (keyHeight / 5));
+
+
+      tft.setCursor(
+        x + (dynamicKeyWidth - charWidth) / 2,
+        y + (keyHeight - charHeight) / 2);
       tft.setTextColor(ILI9341_WHITE);
       tft.setTextSize(2);
       tft.print(keys[index]);
@@ -578,7 +585,10 @@ void drawKeyboard() {
     int symbolCol = 7;
     int symbolX = xStart + symbolCol * (dynamicKeyWidth + keySpacing);
     tft.fillRect(symbolX, spaceY, dynamicKeyWidth, keyHeight, ILI9341_YELLOW);
-    tft.setCursor(symbolX + (dynamicKeyWidth / 5), spaceY + (keyHeight / 5));
+    tft.setCursor(
+      symbolX + (dynamicKeyWidth - charWidth) / 2,
+      spaceY + (keyHeight - charHeight) / 2);
+    tft.setTextColor(ILI9341_BLACK);
     if (currentKeyboardState == STATE_UPPERCASE) {
       tft.print("U");
     } else if (currentKeyboardState == STATE_LOWERCASE) {
@@ -588,16 +598,21 @@ void drawKeyboard() {
     }
   }
 
+  tft.setTextColor(ILI9341_BLACK);
   int backspaceCol = 8;
   int backspaceX = xStart + backspaceCol * (dynamicKeyWidth + keySpacing);
   tft.fillRect(backspaceX, spaceY, dynamicKeyWidth, keyHeight, ILI9341_RED);
-  tft.setCursor(backspaceX + (dynamicKeyWidth / 5), spaceY + (keyHeight / 5));
+  tft.setCursor(
+    backspaceX + (dynamicKeyWidth - charWidth) / 2,
+    spaceY + (keyHeight - charHeight) / 2);
   tft.print("<");
 
   int enterCol = 9;
   int enterX = xStart + enterCol * (dynamicKeyWidth + keySpacing);
   tft.fillRect(enterX, spaceY, dynamicKeyWidth, keyHeight, ILI9341_GREEN);
-  tft.setCursor(enterX + (dynamicKeyWidth / 5), spaceY + (keyHeight / 5));
+  tft.setCursor(
+    enterX + (dynamicKeyWidth - charWidth) / 2,
+    spaceY + (keyHeight - charHeight) / 2);
   tft.print(">");
 }
 
@@ -617,7 +632,7 @@ char getKeyFromCoords(int calX, int calY) {
       keys = "1234567890qwertyuiopasdfghjklzxcvbnm";
       break;
     case STATE_SYMBOLS:
-      keys = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/\\`~";
+      keys = "!@#$%^&*()_+-=[]{}|;:'\",.?/\\`~";
       break;
   }
 
