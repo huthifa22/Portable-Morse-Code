@@ -5,24 +5,24 @@
 
 // Morse code lookup table
 const char* morseTable[] = {
-  ".-", "-...", "-.-.", "-..", ".", "..-.", "--.", "....", "..", ".---", // A-J
-  "-.-", ".-..", "--", "-.", "---", ".--.", "--.-", ".-.", "...", "-",   // K-T
-  "..-", "...-", ".--", "-..-", "-.--", "--..",                        // U-Z
-  "-----", ".----", "..---", "...--", "....-", ".....", "-....", "--...", "---..", "----." // 0-9
+  ".-", "-...", "-.-.", "-..", ".", "..-.", "--.", "....", "..", ".---",                    // A-J
+  "-.-", ".-..", "--", "-.", "---", ".--.", "--.-", ".-.", "...", "-",                      // K-T
+  "..-", "...-", ".--", "-..-", "-.--", "--..",                                             // U-Z
+  "-----", ".----", "..---", "...--", "....-", ".....", "-....", "--...", "---..", "----."  // 0-9
 };
 
 // Function to get Morse code for a character
 String charToMorse(char c) {
   if (c >= 'A' && c <= 'Z') {
-    return morseTable[c - 'A']; // A-Z
+    return morseTable[c - 'A'];  // A-Z
   } else if (c >= 'a' && c <= 'z') {
-    return morseTable[c - 'a']; // a-z
+    return morseTable[c - 'a'];  // a-z
   } else if (c >= '0' && c <= '9') {
-    return morseTable[c - '0' + 26]; // 0-9
+    return morseTable[c - '0' + 26];  // 0-9
   } else if (c == ' ') {
-    return "/"; 
+    return "/";
   } else {
-    return ""; 
+    return "";
   }
 }
 
@@ -36,10 +36,10 @@ String textToMorse(const String& text) {
   for (size_t i = 0; i < text.length(); i++) {
     String code = charToMorse(text[i]);
     if (code.isEmpty()) {
-      return "Invalid Text"; 
+      return "Invalid Text";
     }
     if (!morseCode.isEmpty()) {
-      morseCode += " "; 
+      morseCode += " ";
     }
     morseCode += code;
   }
@@ -47,34 +47,36 @@ String textToMorse(const String& text) {
   return morseCode;
 }
 
-// Blink Morse code on a pin with adjustable speed 
-void blinkMorse(const String& morseCode, int pin, int wpm) {
-
-  int dotDuration = 1200 / wpm; 
+// Blink and Hear Morse code on pins with adjustable speed and frequency
+void audioAndLightMorse(const String& morseCode, int audioPin, int lightPin, int wpm, int frequency) {
+  int dotDuration = 1200 / wpm;
   int dashDuration = 3 * dotDuration;
   int symbolSpace = dotDuration;
   int letterSpace = 3 * dotDuration;
   int wordSpace = 7 * dotDuration;
 
-  pinMode(pin, OUTPUT);
-  
+  pinMode(audioPin, OUTPUT);
+  pinMode(lightPin, OUTPUT);
+
   for (char c : morseCode) {
     if (c == '.') {
-      digitalWrite(pin, HIGH);
+      tone(audioPin, frequency, dotDuration);
+      digitalWrite(lightPin, HIGH);
       delay(dotDuration);
-      digitalWrite(pin, LOW);
+      digitalWrite(lightPin, LOW);
       delay(symbolSpace);
     } else if (c == '-') {
-      digitalWrite(pin, HIGH);
+      tone(audioPin, frequency, dashDuration);
+      digitalWrite(lightPin, HIGH);
       delay(dashDuration);
-      digitalWrite(pin, LOW);
+      digitalWrite(lightPin, LOW);
       delay(symbolSpace);
     } else if (c == ' ') {
-      delay(letterSpace); 
+      delay(letterSpace);
     } else if (c == '/') {
-      delay(wordSpace); 
+      delay(wordSpace);
     }
   }
 }
 
-#endif // MORSE_UTILS_H
+#endif  // MORSE_UTILS_H

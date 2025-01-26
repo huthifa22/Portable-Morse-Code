@@ -52,7 +52,8 @@ std::vector<String> messageQueue;
 int currentMessageIndex = -1;
 static bool previousWiFiStatus = false;
 
-int WPM = 20;
+int WPM = 15;
+int frequency = 700;
 
 enum AppState {
   STATE_STARTUP,
@@ -1084,7 +1085,9 @@ void runMailScreen() {
       String morseCode = textToMorse(messageQueue[currentMessageIndex]);
 
       //Light Morse Code on Pin D2
-      blinkMorse(morseCode, 2, WPM);
+      //Audio Morse Code on Pin D4 and 600 HZ
+      audioAndLightMorse(morseCode, 4, 2, WPM, frequency);
+
       Serial.println("Acknowledgment sent to cloud.");
       textMessage = "PMC received: \"" + messageQueue[currentMessageIndex] + "\" | Morse: " + morseCode;
       ArduinoCloud.update();
@@ -1457,7 +1460,9 @@ void runEncodeState() {
           bottomPlaceholderActive = false;
         } else {
           morseText = textToMorse(inputText);
-          blinkMorse(morseText, 2, WPM);
+
+          audioAndLightMorse(morseText, 4, 2, WPM, frequency);
+
           if (morseText == "Invalid Text" || morseText.isEmpty()) {
             bottomPlaceholderActive = true;
             morseText = "";
