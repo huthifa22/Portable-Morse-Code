@@ -65,9 +65,9 @@ enum AppState {
   STATE_GUIDE,
   STATE_ENCODE,
   STATE_DECODE,
+  STATE_GAME,
   STATE_TOOLS,
-  STATE_OTHER,
-  STATE_INFO
+  STATE_OTHER
 };
 
 enum KeyboardState {
@@ -126,16 +126,16 @@ void loop() {
       runDummyState("Decode");
       break;
 
+    case STATE_GAME:
+      runDummyState("Game");
+      break;
+
     case STATE_TOOLS:
       runDummyState("Tools");
       break;
 
     case STATE_OTHER:
       runDummyState("Other");
-      break;
-
-    case STATE_INFO:
-      runDummyState("Info");
       break;
   }
 
@@ -278,12 +278,12 @@ void runWiFiSetupScreen() {
 
 void runWiFiCredentialsScreen() {
   static bool screenDrawn = false;
-  static String ssid = "iPhone";
-  static String password = "coolwifi";
+  static String ssid = "test";
+  static String password = "test";
   const int inputBoxHeight = 30;
   const int outputBoxHeight = 30;
-  const int textAreaY = 10;
-  const int passAreaY = textAreaY + inputBoxHeight + 10;
+  const int textAreaY = 35;
+  const int passAreaY = textAreaY + inputBoxHeight + 6;
   const int buttonWidth = 30;
   const int buttonHeight = inputBoxHeight;
   const int boxWidth = tft.width() - 70;
@@ -302,13 +302,18 @@ void runWiFiCredentialsScreen() {
     uint16_t topColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
     uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
 
+    tft.setCursor(6, 8);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print("Connect to Wi-Fi");
+
     tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, topColor);
     tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
     tft.setCursor(10, textAreaY + 8);
     tft.setTextSize(2);
     if (topPlaceholderActive && ssid.length() == 0) {
       tft.setTextColor(ILI9341_GRAY);
-      tft.print("Enter WiFi Name");
+      tft.print("Enter Wi-Fi Name");
     } else {
       tft.setTextColor(ILI9341_WHITE);
       tft.print(ssid.substring(ssidScrollOffset, ssidScrollOffset + visibleChars));
@@ -320,7 +325,7 @@ void runWiFiCredentialsScreen() {
     tft.setTextSize(2);
     if (bottomPlaceholderActive && password.length() == 0) {
       tft.setTextColor(ILI9341_GRAY);
-      tft.print("Enter WiFi Password");
+      tft.print("Enter Wi-Fi Password");
     } else {
       tft.setTextColor(ILI9341_WHITE);
       tft.print(password.substring(passScrollOffset, passScrollOffset + visibleChars));
@@ -354,8 +359,8 @@ void runWiFiCredentialsScreen() {
     tft.setTextSize(2);
     tft.print(">");
 
-    int exitButtonX = 260;
-    int exitButtonY = 87;
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
     int exitButtonWidth = 60;
     int exitButtonHeight = 25;
     tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
@@ -491,7 +496,7 @@ void runWiFiCredentialsScreen() {
       tft.setTextSize(2);
       if (topPlaceholderActive && ssid.length() == 0) {
         tft.setTextColor(ILI9341_GRAY);
-        tft.print("Enter WiFi Name");
+        tft.print("Enter Wi-Fi Name");
       } else {
         tft.setTextColor(ILI9341_WHITE);
         tft.print(ssid.substring(ssidScrollOffset, ssidScrollOffset + visibleChars));
@@ -503,15 +508,15 @@ void runWiFiCredentialsScreen() {
       tft.setTextSize(2);
       if (bottomPlaceholderActive && password.length() == 0) {
         tft.setTextColor(ILI9341_GRAY);
-        tft.print("Enter WiFi Password");
+        tft.print("Enter Wi-Fi Password");
       } else {
         tft.setTextColor(ILI9341_WHITE);
         tft.print(password.substring(passScrollOffset, passScrollOffset + visibleChars));
       }
     }
 
-    int exitButtonX = 260;
-    int exitButtonY = 87;
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
     int exitButtonWidth = 60;
     int exitButtonHeight = 25;
     if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
@@ -865,7 +870,7 @@ void runMainMenuScreen() {
     int boxHeight = 60;
     int boxSpacing = 10;
     int startY = 80;
-    const char* labels[] = { "Guide", "Encode", "Decode", "Tools", "Other", "Info" };
+    const char* labels[] = { "Guide", "Encode", "Decode", "Game", "Tools", "Other" };
 
     for (int i = 0; i < 6; ++i) {
       int row = i / 3;
@@ -957,9 +962,9 @@ void runMainMenuScreen() {
           case 0: currentState = STATE_GUIDE; break;
           case 1: currentState = STATE_ENCODE; break;
           case 2: currentState = STATE_DECODE; break;
-          case 3: currentState = STATE_TOOLS; break;
-          case 4: currentState = STATE_OTHER; break;
-          case 5: currentState = STATE_INFO; break;
+          case 3: currentState = STATE_GAME; break;
+          case 4: currentState = STATE_TOOLS; break;
+          case 5: currentState = STATE_OTHER; break;
         }
         return;
       }
@@ -1016,51 +1021,117 @@ void onTextMessageChange() {
 }
 
 void runMailScreen() {
-  if (messageQueue.empty()) {
-    noMailPopup();
-    return;
-  }
-
-  if (currentMessageIndex < 0) {
-    currentMessageIndex = 0;
-  }
+  static bool screenDrawn = false;
+  static String inputMessage;
+  static String outputMessage = "";
+  const int inputBoxHeight = 30;
+  const int outputBoxHeight = 30;
+  const int labelHeight = 20;
+  const int labelMargin = 5;
+  const int textAreaY = 10;
+  const int incomingLabelY = textAreaY;
+  const int inputBoxY = incomingLabelY + labelHeight + labelMargin + 6;
+  const int outputAreaY = inputBoxY + inputBoxHeight + labelMargin + 2;
+  const int buttonWidth = 30;
+  const int buttonHeight = inputBoxHeight;
+  const int boxWidth = tft.width() - 70;
+  const int visibleChars = boxWidth / 12;
+  static int inputScrollOffset = 0;
+  static int outputScrollOffset = 0;
+  static bool isTopBoxSelected = true;
+  static int totalMessages = 0;
+  static int currentMessageIndex = 0;
 
   if (!screenDrawn) {
+    if (!messageQueue.empty()) {
+      totalMessages = messageQueue.size();
+      if (currentMessageIndex >= totalMessages) {
+        currentMessageIndex = totalMessages - 1;
+      }
+      inputMessage = messageQueue[currentMessageIndex];
+    }
+
     tft.fillScreen(ILI9341_BLACK);
+    tft.setCursor(5, incomingLabelY + 2);
     tft.setTextSize(2);
     tft.setTextColor(ILI9341_WHITE);
-    tft.setCursor(10, 10);
-    tft.print("Message:");
-    tft.setCursor(10, 40);
-    tft.print(messageQueue[currentMessageIndex]);
+    tft.print("Incoming Messages");
 
-    int buttonWidth = 100;
-    int buttonHeight = 40;
-    int topButtonY = tft.height() - 120;
-    int bottomButtonY = tft.height() - 60;
+    uint16_t topColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
+    tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, topColor);
+    tft.fillRect(6, inputBoxY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+    tft.setCursor(10, inputBoxY + 8);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    if (inputMessage.length() > 0) {
+      int displayLength = min(visibleChars, (int)(inputMessage.length() - inputScrollOffset));
+      tft.print(inputMessage.substring(inputScrollOffset, inputScrollOffset + displayLength));
+    }
 
-    int acceptX = 10;
-    int denyX = tft.width() - (buttonWidth + 10);
-    int prevX = 10;
-    int nextX = tft.width() - (buttonWidth + 10);
+    uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
+    tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, bottomColor);
+    tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+    tft.setCursor(10, outputAreaY + 8);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
 
-    tft.fillRect(acceptX, topButtonY, buttonWidth, buttonHeight, ILI9341_GREEN);
-    tft.setCursor(acceptX + 20, topButtonY + 10);
-    tft.setTextColor(ILI9341_BLACK);
-    tft.print("Accept");
+    for (int y = inputBoxY, i = 0; i < 2; i++, y = outputAreaY) {
+      tft.fillRect(boxWidth + 10, y, buttonWidth, buttonHeight, ILI9341_BLUE);
+      tft.drawRect(boxWidth + 10, y, buttonWidth, buttonHeight, ILI9341_WHITE);
+      tft.setCursor(boxWidth + 10 + (buttonWidth - 12) / 2, y + (buttonHeight - 16) / 2);
+      tft.print("<");
 
-    tft.fillRect(denyX, topButtonY, buttonWidth, buttonHeight, ILI9341_RED);
-    tft.setCursor(denyX + 20, topButtonY + 10);
-    tft.print("Deny");
+      tft.fillRect(boxWidth + 40, y, buttonWidth, buttonHeight, ILI9341_BLUE);
+      tft.drawRect(boxWidth + 40, y, buttonWidth, buttonHeight, ILI9341_WHITE);
+      tft.setCursor(boxWidth + 40 + (buttonWidth - 12) / 2, y + (buttonHeight - 16) / 2);
+      tft.print(">");
+    }
 
-    if (messageQueue.size() > 1) {
-      tft.fillRect(prevX, bottomButtonY, buttonWidth, buttonHeight, ILI9341_BLUE);
-      tft.setCursor(prevX + 20, bottomButtonY + 10);
-      tft.print("Prev");
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = incomingLabelY;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+    tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
+    tft.setCursor(exitButtonX + (exitButtonWidth - 48) / 2, exitButtonY + (exitButtonHeight - 16) / 2 + 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("EXIT");
+    tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
 
-      tft.fillRect(nextX, bottomButtonY, buttonWidth, buttonHeight, ILI9341_BLUE);
-      tft.setCursor(nextX + 20, bottomButtonY + 10);
-      tft.print("Next");
+    if (totalMessages > 0) {
+      String counter = String(currentMessageIndex + 1) + " of " + String(totalMessages);
+      int16_t x1, y1;
+      uint16_t w, h;
+      tft.getTextBounds(counter, 0, 0, &x1, &y1, &w, &h);
+
+      int lineY = tft.height() - 20;
+      int centerX = ((tft.width() - w) / 2) + 4;
+      tft.setCursor(centerX, lineY);
+      tft.setTextSize(2);
+      tft.setTextColor(ILI9341_WHITE);
+      tft.print(counter);
+
+      if (totalMessages > 1) {
+        const int bottomBtnW = 60;
+        const int bottomBtnH = 30;
+        int prevBtnX = 0;
+        int nextBtnX = tft.width() - bottomBtnW;
+        int btnY = lineY - 10;
+
+        if (currentMessageIndex > 0) {
+          tft.setCursor(prevBtnX + 5, btnY + 7);
+          tft.setTextSize(2);
+          tft.setTextColor(ILI9341_YELLOW);
+          tft.print("Prev");
+        }
+
+        if (currentMessageIndex < (totalMessages - 1)) {
+          tft.setCursor(nextBtnX + 5, btnY + 7);
+          tft.setTextSize(2);
+          tft.setTextColor(ILI9341_YELLOW);
+          tft.print("Next");
+        }
+      }
     }
 
     screenDrawn = true;
@@ -1071,61 +1142,104 @@ void runMailScreen() {
     int calX = (p.y * xCalM) + xCalC;
     int calY = (p.x * yCalM) + yCalC;
 
-    int buttonWidth = 100;
-    int buttonHeight = 40;
-    int topButtonY = tft.height() - 120;
-    int bottomButtonY = tft.height() - 60;
-
-    int acceptX = 10;
-    int denyX = tft.width() - (buttonWidth + 10);
-    int prevX = 10;
-    int nextX = tft.width() - (buttonWidth + 10);
-
-    if (calX > acceptX && calX < acceptX + buttonWidth && calY > topButtonY && calY < topButtonY + buttonHeight) {
-      String morseCode = textToMorse(messageQueue[currentMessageIndex]);
-
-      //Light Morse Code on Pin D2
-      //Audio Morse Code on Pin D4 and 600 HZ
-      audioAndLightMorse(morseCode, 4, 2, WPM, frequency);
-
-      Serial.println("Acknowledgment sent to cloud.");
-      textMessage = "PMC received: \"" + messageQueue[currentMessageIndex] + "\" | Morse: " + morseCode;
-      ArduinoCloud.update();
-      messageQueue.erase(messageQueue.begin() + currentMessageIndex);
-
-      if (currentMessageIndex >= messageQueue.size()) {
-        currentMessageIndex--;
+    if (calX >= 5 && calX <= 5 + boxWidth) {
+      if (calY >= inputBoxY && calY <= inputBoxY + inputBoxHeight && !isTopBoxSelected) {
+        isTopBoxSelected = true;
+        tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, ILI9341_GREEN);
+        tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, ILI9341_WHITE);
       }
-      screenDrawn = false;
-      if (messageQueue.empty()) {
-        currentState = STATE_MAIN_MENU;
+      if (calY >= outputAreaY && calY <= outputAreaY + outputBoxHeight && isTopBoxSelected) {
+        isTopBoxSelected = false;
+        tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, ILI9341_WHITE);
+        tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, ILI9341_GREEN);
       }
     }
 
-    if (calX > denyX && calX < denyX + buttonWidth && calY > topButtonY && calY < topButtonY + buttonHeight) {
-      Serial.println("Message Denied");
-      textMessage = "Message Denied.";
-      ArduinoCloud.update();
-      messageQueue.erase(messageQueue.begin() + currentMessageIndex);
-      if (currentMessageIndex >= messageQueue.size()) {
-        currentMessageIndex--;
-      }
-      screenDrawn = false;
-      if (messageQueue.empty()) {
-        currentState = STATE_MAIN_MENU;
+    if (calX > boxWidth + 10 && calX < boxWidth + 40) {
+      if (calY > inputBoxY && calY < inputBoxY + buttonHeight) {
+        if (!isTopBoxSelected) {
+          isTopBoxSelected = true;
+          tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, ILI9341_GREEN);
+          tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, ILI9341_WHITE);
+        }
+        if (inputScrollOffset > 0) {
+          inputScrollOffset--;
+          tft.fillRect(6, inputBoxY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+          tft.setCursor(10, inputBoxY + 8);
+          tft.setTextColor(ILI9341_WHITE);
+          int displayLength = min(visibleChars, (int)(inputMessage.length() - inputScrollOffset));
+          tft.print(inputMessage.substring(inputScrollOffset, inputScrollOffset + displayLength));
+        }
+      } else if (calY > outputAreaY && calY < outputAreaY + buttonHeight) {
+        if (isTopBoxSelected) {
+          isTopBoxSelected = false;
+          tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, ILI9341_WHITE);
+          tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, ILI9341_GREEN);
+        }
+        if (outputScrollOffset > 0) {
+          outputScrollOffset--;
+          tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        }
       }
     }
 
-    if (messageQueue.size() > 1 && calX > prevX && calX < prevX + buttonWidth && calY > bottomButtonY && calY < bottomButtonY + buttonHeight) {
-      if (currentMessageIndex > 0) {
+    if (calX > boxWidth + 40 && calX < boxWidth + 70) {
+      if (calY > inputBoxY && calY < inputBoxY + buttonHeight) {
+        if (!isTopBoxSelected) {
+          isTopBoxSelected = true;
+          tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, ILI9341_GREEN);
+          tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, ILI9341_WHITE);
+        }
+        if (inputScrollOffset < (int)(inputMessage.length() - visibleChars)) {
+          inputScrollOffset++;
+          tft.fillRect(6, inputBoxY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+          tft.setCursor(10, inputBoxY + 8);
+          tft.setTextColor(ILI9341_WHITE);
+          int displayLength = min(visibleChars, (int)(inputMessage.length() - inputScrollOffset));
+          tft.print(inputMessage.substring(inputScrollOffset, inputScrollOffset + displayLength));
+        }
+      } else if (calY > outputAreaY && calY < outputAreaY + buttonHeight) {
+        if (isTopBoxSelected) {
+          isTopBoxSelected = false;
+          tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, ILI9341_WHITE);
+          tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, ILI9341_GREEN);
+        }
+        if (outputScrollOffset < (int)(outputMessage.length() - visibleChars)) {
+          outputScrollOffset++;
+          tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        }
+      }
+    }
+
+    int exitButtonX = tft.width() - 70;
+    int exitButtonY = incomingLabelY;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+    if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+      screenDrawn = false;
+      currentState = STATE_MAIN_MENU;
+      return;
+    }
+
+    if (totalMessages > 1) {
+      int lineY = tft.height() - 20;
+      const int bottomBtnW = 60;
+      const int bottomBtnH = 30;
+      int prevBtnX = 0;
+      int nextBtnX = tft.width() - bottomBtnW;
+      int btnY = lineY - 10;
+
+      if (currentMessageIndex > 0 && calX >= prevBtnX && calX <= prevBtnX + bottomBtnW && calY >= btnY && calY <= btnY + bottomBtnH) {
         currentMessageIndex--;
+        inputScrollOffset = 0;
+        inputMessage = messageQueue[currentMessageIndex];
         screenDrawn = false;
       }
-    }
 
-    if (messageQueue.size() > 1 && calX > nextX && calX < nextX + buttonWidth && calY > bottomButtonY && calY < bottomButtonY + buttonHeight) {
-      if (currentMessageIndex < messageQueue.size() - 1) {
+      if (currentMessageIndex < totalMessages - 1 && calX >= nextBtnX && calX <= nextBtnX + bottomBtnW && calY >= btnY && calY <= btnY + bottomBtnH) {
         currentMessageIndex++;
+        inputScrollOffset = 0;
+        inputMessage = messageQueue[currentMessageIndex];
         screenDrawn = false;
       }
     }
@@ -1292,8 +1406,8 @@ void runEncodeState() {
   static String morseText = "";
   const int inputBoxHeight = 30;
   const int outputBoxHeight = 30;
-  const int textAreaY = 10;
-  const int morseAreaY = textAreaY + inputBoxHeight + 10;
+  const int textAreaY = 35;
+  const int morseAreaY = textAreaY + inputBoxHeight + 6;
   const int buttonWidth = 30;
   const int buttonHeight = inputBoxHeight;
   const int boxWidth = tft.width() - 70;
@@ -1311,6 +1425,11 @@ void runEncodeState() {
 
     uint16_t topColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
     uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
+
+    tft.setCursor(6, 9);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print("Encode Messages");
 
     tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, topColor);
     tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
@@ -1364,10 +1483,11 @@ void runEncodeState() {
     tft.setTextSize(2);
     tft.print(">");
 
-    int exitButtonX = 260;
-    int exitButtonY = 87;
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
     int exitButtonWidth = 60;
     int exitButtonHeight = 25;
+
 
     tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
     int16_t textX = exitButtonX + (exitButtonWidth - 48) / 2;
@@ -1532,10 +1652,11 @@ void runEncodeState() {
       }
     }
 
-    int exitButtonX = 260;
-    int exitButtonY = 87;
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
     int exitButtonWidth = 60;
     int exitButtonHeight = 25;
+
 
     if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
       screenDrawn = false;
