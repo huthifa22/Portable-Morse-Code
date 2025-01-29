@@ -7,6 +7,7 @@
 #include "TouchScreen.h"
 #include <vector>
 #include <Fonts/FreeSansBoldOblique18pt7b.h>
+#include <Fonts/FreeSansBold18pt7b.h>
 
 // TFT Display SPI Pins
 #define TFT_CLK 13
@@ -278,8 +279,8 @@ void runWiFiSetupScreen() {
 
 void runWiFiCredentialsScreen() {
   static bool screenDrawn = false;
-  static String ssid = "test";
-  static String password = "test";
+  static String ssid = "iPhone";
+  static String password = "coolwifi";
   const int inputBoxHeight = 30;
   const int outputBoxHeight = 30;
   const int textAreaY = 35;
@@ -1010,7 +1011,7 @@ void resetState() {
 
 void onTextMessageChange() {
   textMessage.trim();
-  if (textMessage.isEmpty() || textMessage == "" || textMessage == "Message Denied." || textMessage.startsWith("PMC received:") || textMessage == "\x1B") {
+  if (textMessage.isEmpty() || textMessage == "" || textMessage.startsWith("Message Denied:") || textMessage.startsWith("PMC received:") || textMessage == "\x1B") {
     return;
   }
 
@@ -1021,9 +1022,17 @@ void onTextMessageChange() {
 }
 
 void runMailScreen() {
+  if (messageQueue.empty()) {
+    noMailPopup();
+    return;
+  }
+
   static bool screenDrawn = false;
+  static bool messageDecoded = false;
+  static bool messageSent = false;
   static String inputMessage;
   static String outputMessage = "";
+  static String originalMessage = "";
   const int inputBoxHeight = 30;
   const int outputBoxHeight = 30;
   const int labelHeight = 20;
@@ -1041,6 +1050,9 @@ void runMailScreen() {
   static bool isTopBoxSelected = true;
   static int totalMessages = 0;
   static int currentMessageIndex = 0;
+  const int messageY = outputAreaY + outputBoxHeight + 20;
+  int buttonX = 80;
+  int buttonY = messageY + 25;
 
   if (!screenDrawn) {
     if (!messageQueue.empty()) {
@@ -1048,7 +1060,8 @@ void runMailScreen() {
       if (currentMessageIndex >= totalMessages) {
         currentMessageIndex = totalMessages - 1;
       }
-      inputMessage = messageQueue[currentMessageIndex];
+      originalMessage = messageQueue[currentMessageIndex];
+      inputMessage = textToMorse(originalMessage);
     }
 
     tft.fillScreen(ILI9341_BLACK);
@@ -1067,6 +1080,20 @@ void runMailScreen() {
       int displayLength = min(visibleChars, (int)(inputMessage.length() - inputScrollOffset));
       tft.print(inputMessage.substring(inputScrollOffset, inputScrollOffset + displayLength));
     }
+
+    tft.setCursor(7, messageY);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print("Decode Incomming Message?");
+
+    tft.setCursor(buttonX, buttonY);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_GREEN);
+    tft.print("Decode");
+
+    tft.setCursor(buttonX + 95, buttonY);
+    tft.setTextColor(ILI9341_RED);
+    tft.print("Reject");
 
     uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
     tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, bottomColor);
@@ -1142,6 +1169,69 @@ void runMailScreen() {
     int calX = (p.y * xCalM) + xCalC;
     int calY = (p.x * yCalM) + yCalC;
 
+    int decodeStartX = buttonX;
+    int decodeEndX = buttonX + 60;
+    int decodeStartY = buttonY - 10;
+    int decodeEndY = buttonY + 15;
+
+    if (calX > decodeStartX && calX < decodeEndX && calY > decodeStartY && calY < decodeEndY) {
+
+      // Light Morse Code on Pin D2
+      // Audio Morse Code on Pin D4 and 600 HZ
+      audioAndLightMorse(inputMessage, 4, 2, WPM, frequency);
+
+      if (!messageSent) {
+        textMessage = "PMC received: \"" + originalMessage + "\" | Morse: " + inputMessage;
+        ArduinoCloud.update();
+        messageSent = true;
+      }
+
+      messageDecoded = true;
+      isTopBoxSelected = false;
+      outputMessage = originalMessage;
+
+      tft.drawRect(5, inputBoxY, boxWidth, inputBoxHeight, ILI9341_WHITE);
+      tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, ILI9341_GREEN);
+      tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+      tft.setCursor(10, outputAreaY + 8);
+      tft.setTextColor(ILI9341_WHITE);
+      int displayLength = min(visibleChars, (int)(outputMessage.length() - outputScrollOffset));
+      tft.print(outputMessage.substring(outputScrollOffset, outputScrollOffset + displayLength));
+    }
+
+    int rejectStartX = buttonX + 95;
+    int rejectEndX = rejectStartX + 55;
+    int rejectStartY = buttonY - 10;
+    int rejectEndY = buttonY + 15;
+
+    if (calX > rejectStartX && calX < rejectEndX && calY > rejectStartY && calY < rejectEndY) {
+      if (!messageDecoded) {
+        textMessage = "Message Denied: \"" + messageQueue[currentMessageIndex] + "\"";
+        ArduinoCloud.update();
+
+        if (!messageQueue.empty() && currentMessageIndex < messageQueue.size()) {
+          messageQueue.erase(messageQueue.begin() + currentMessageIndex);
+          totalMessages--;
+
+          if (totalMessages == 0) {
+            screenDrawn = false;
+            currentState = STATE_MAIN_MENU;
+            return;
+          }
+
+          if (currentMessageIndex >= totalMessages) {
+            currentMessageIndex = totalMessages - 1;
+          }
+          inputMessage = messageQueue[currentMessageIndex];
+        }
+
+        messageDecoded = false;
+        messageSent = false;
+        screenDrawn = false;
+      }
+    }
+
+
     if (calX >= 5 && calX <= 5 + boxWidth) {
       if (calY >= inputBoxY && calY <= inputBoxY + inputBoxHeight && !isTopBoxSelected) {
         isTopBoxSelected = true;
@@ -1179,6 +1269,10 @@ void runMailScreen() {
         if (outputScrollOffset > 0) {
           outputScrollOffset--;
           tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+          tft.setCursor(10, outputAreaY + 8);
+          tft.setTextColor(ILI9341_WHITE);
+          int displayLength = min(visibleChars, (int)(outputMessage.length() - outputScrollOffset));
+          tft.print(outputMessage.substring(outputScrollOffset, outputScrollOffset + displayLength));
         }
       }
     }
@@ -1207,6 +1301,10 @@ void runMailScreen() {
         if (outputScrollOffset < (int)(outputMessage.length() - visibleChars)) {
           outputScrollOffset++;
           tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+          tft.setCursor(10, outputAreaY + 8);
+          tft.setTextColor(ILI9341_WHITE);
+          int displayLength = min(visibleChars, (int)(outputMessage.length() - outputScrollOffset));
+          tft.print(outputMessage.substring(outputScrollOffset, outputScrollOffset + displayLength));
         }
       }
     }
@@ -1215,9 +1313,17 @@ void runMailScreen() {
     int exitButtonY = incomingLabelY;
     int exitButtonWidth = 60;
     int exitButtonHeight = 25;
+
     if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+      if (messageDecoded && !messageQueue.empty() && currentMessageIndex < messageQueue.size()) {
+        messageQueue.erase(messageQueue.begin() + currentMessageIndex);
+        totalMessages--;
+        messageDecoded = false;
+      }
+
       screenDrawn = false;
       currentState = STATE_MAIN_MENU;
+      messageSent = false;
       return;
     }
 
@@ -1230,16 +1336,46 @@ void runMailScreen() {
       int btnY = lineY - 10;
 
       if (currentMessageIndex > 0 && calX >= prevBtnX && calX <= prevBtnX + bottomBtnW && calY >= btnY && calY <= btnY + bottomBtnH) {
+        if (messageDecoded && !messageQueue.empty() && currentMessageIndex < messageQueue.size()) {
+          messageQueue.erase(messageQueue.begin() + currentMessageIndex);
+          totalMessages--;
+          messageDecoded = false;
+        }
+
+        if (totalMessages == 0) {
+          screenDrawn = false;
+          currentState = STATE_MAIN_MENU;
+          return;
+        }
+
         currentMessageIndex--;
         inputScrollOffset = 0;
         inputMessage = messageQueue[currentMessageIndex];
+        outputMessage = "";
+        outputScrollOffset = 0;
+        messageSent = false;
         screenDrawn = false;
       }
 
       if (currentMessageIndex < totalMessages - 1 && calX >= nextBtnX && calX <= nextBtnX + bottomBtnW && calY >= btnY && calY <= btnY + bottomBtnH) {
+        if (messageDecoded && !messageQueue.empty() && currentMessageIndex < messageQueue.size()) {
+          messageQueue.erase(messageQueue.begin() + currentMessageIndex);
+          totalMessages--;
+          messageDecoded = false;
+        }
+
+        if (totalMessages == 0) {
+          screenDrawn = false;
+          currentState = STATE_MAIN_MENU;
+          return;
+        }
+
         currentMessageIndex++;
         inputScrollOffset = 0;
         inputMessage = messageQueue[currentMessageIndex];
+        outputMessage = "";
+        outputScrollOffset = 0;
+        messageSent = false;
         screenDrawn = false;
       }
     }
