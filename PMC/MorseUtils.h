@@ -11,6 +11,20 @@ const char* morseTable[] = {
   "-----", ".----", "..---", "...--", "....-", ".....", "-....", "--...", "---..", "----."  // 0-9
 };
 
+// Function to get Char for single Morse code
+char decodeSingleMorse(const String& code) {
+  for (int i = 0; i < 36; i++) {
+    if (code == morseTable[i]) {
+      if (i < 26) {
+        return (char)('A' + i);
+      } else {
+        return (char)('0' + (i - 26));
+      }
+    }
+  }
+  return '?';
+}
+
 // Function to get Morse code for a character
 String charToMorse(char c) {
   if (c >= 'A' && c <= 'Z') {
@@ -45,6 +59,35 @@ String textToMorse(const String& text) {
   }
 
   return morseCode;
+}
+
+// Convert Morse Code to Text
+String morseToText(int pinNumber, const String& message, int timeGap) {
+  String result;
+  String current;
+  pinMode(pinNumber, INPUT_PULLUP);
+  
+  for (int i = 0; i < message.length(); i++) {
+    char c = message.charAt(i);
+    if (c == '.' || c == '-') {
+      current += c;
+    } else if (c == ' ') {
+      if (!current.isEmpty()) {
+        result += decodeSingleMorse(current);
+        current = "";
+      }
+    } else if (c == '/') {
+      if (!current.isEmpty()) {
+        result += decodeSingleMorse(current);
+        current = "";
+      }
+      result += " ";
+    }
+  }
+  if (!current.isEmpty()) {
+    result += decodeSingleMorse(current);
+  }
+  return result;
 }
 
 // Blink and Hear Morse code on pins with adjustable speed and frequency

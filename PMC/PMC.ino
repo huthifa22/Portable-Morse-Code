@@ -7,7 +7,6 @@
 #include "TouchScreen.h"
 #include <vector>
 #include <Fonts/FreeSansBoldOblique18pt7b.h>
-#include <Fonts/FreeSansBold18pt7b.h>
 
 // TFT Display SPI Pins
 #define TFT_CLK 13
@@ -21,6 +20,11 @@
 #define XM A0
 #define YM 7
 #define XP 6
+
+// LED, Buzzer, and Button Pins
+#define LED_PIN 2
+#define BUZZER_PIN 4
+#define BUTTON_PIN 5
 
 // Touchscreen Calibration
 #define MINPRESSURE 2
@@ -53,8 +57,11 @@ std::vector<String> messageQueue;
 int currentMessageIndex = -1;
 static bool previousWiFiStatus = false;
 
+// User Customizable Variables
 int WPM = 15;
-int frequency = 700;
+long buzzerFrequency = 700;
+long buttonPressTimingThreshold = 500;
+long letterTerminationDelay = 1000;
 
 enum AppState {
   STATE_STARTUP,
@@ -120,11 +127,11 @@ void loop() {
 
     case STATE_ENCODE:
       currentKeyboardState = STATE_UPPERCASE;
-      runEncodeState();
+      runEncodeScreen();
       break;
 
     case STATE_DECODE:
-      runDummyState("Decode");
+      runDecodeScreen();
       break;
 
     case STATE_GAME:
@@ -1176,9 +1183,7 @@ void runMailScreen() {
 
     if (calX > decodeStartX && calX < decodeEndX && calY > decodeStartY && calY < decodeEndY) {
 
-      // Light Morse Code on Pin D2
-      // Audio Morse Code on Pin D4 and 600 HZ
-      audioAndLightMorse(inputMessage, 4, 2, WPM, frequency);
+      audioAndLightMorse(inputMessage, BUZZER_PIN, LED_PIN, WPM, buzzerFrequency);
 
       if (!messageSent) {
         textMessage = "PMC received: \"" + originalMessage + "\" | Morse: " + inputMessage;
@@ -1537,7 +1542,7 @@ void guideScreen() {
   }
 }
 
-void runEncodeState() {
+void runEncodeScreen() {
   static String inputText = "";
   static String morseText = "";
   const int inputBoxHeight = 30;
@@ -1717,7 +1722,7 @@ void runEncodeState() {
         } else {
           morseText = textToMorse(inputText);
 
-          audioAndLightMorse(morseText, 4, 2, WPM, frequency);
+          audioAndLightMorse(morseText, BUZZER_PIN, LED_PIN, WPM, buzzerFrequency);
 
           if (morseText == "Invalid Text" || morseText.isEmpty()) {
             bottomPlaceholderActive = true;
@@ -1803,6 +1808,432 @@ void runEncodeState() {
     uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
     tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, topColor);
     tft.drawRect(5, morseAreaY, boxWidth, outputBoxHeight, bottomColor);
+  }
+}
+
+void runDecodeScreen() {
+  static String inputText = "";
+  static String outputText = "";
+  const int inputBoxHeight = 30;
+  const int outputBoxHeight = 30;
+  const int textAreaY = 35;
+  const int outputAreaY = textAreaY + inputBoxHeight + 6;
+  const int buttonWidth = 30;
+  const int buttonHeight = inputBoxHeight;
+  const int boxWidth = tft.width() - 70;
+  const int visibleChars = boxWidth / 12;
+  static int inputScrollOffset = 0;
+  static int outputScrollOffset = 0;
+  static bool isTopBoxSelected = true;
+  static bool topPlaceholderActive = true;
+  static bool bottomPlaceholderActive = true;
+  static bool screenDrawn = false;
+  const int spacebarWidth = 140;
+  const int spacebarHeight = 30;
+  const int spacebarX = 5;
+  const int spacebarY = outputAreaY + outputBoxHeight + 10;
+  static unsigned long lastButtonReleaseTime = 0;
+  static bool buttonPressed = false;
+  static unsigned long pressStartTime = 0;
+
+  if (!screenDrawn) {
+    resetState();
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    tft.fillScreen(ILI9341_BLACK);
+    tft.setCursor(6, 9);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print("Decode Messages");
+
+    tft.fillRect(spacebarX, spacebarY, spacebarWidth, spacebarHeight, ILI9341_DARKGREY);
+    tft.drawRect(spacebarX, spacebarY, spacebarWidth, spacebarHeight, ILI9341_WHITE);
+    tft.setCursor(spacebarX + (spacebarWidth - 40) / 2 - 10, spacebarY + (spacebarHeight - 16) / 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("Space");
+
+    int deleteButtonX = spacebarX + spacebarWidth + 10;
+    int deleteButtonY = spacebarY;
+    int deleteButtonWidth = 100;
+    int deleteButtonHeight = spacebarHeight;
+
+    tft.fillRect(deleteButtonX, deleteButtonY, deleteButtonWidth, deleteButtonHeight, ILI9341_RED);
+    tft.drawRect(deleteButtonX, deleteButtonY, deleteButtonWidth, deleteButtonHeight, ILI9341_WHITE);
+    tft.setCursor(deleteButtonX + 15, deleteButtonY + (deleteButtonHeight - 16) / 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("Delete");
+
+    uint16_t topColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
+    tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, topColor);
+    tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+    tft.setCursor(10, textAreaY + 8);
+    tft.setTextSize(2);
+
+    if (inputText.length() == 0) {
+      topPlaceholderActive = true;
+    }
+    if (outputText.length() == 0) {
+      bottomPlaceholderActive = true;
+    }
+
+    if (topPlaceholderActive && inputText.length() == 0) {
+      tft.setTextColor(ILI9341_GRAY);
+      tft.print("Enter Code");
+    } else {
+      tft.setTextColor(ILI9341_WHITE);
+      tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+    }
+
+    uint16_t bottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
+    tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, bottomColor);
+    tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+    tft.setCursor(10, outputAreaY + 8);
+    tft.setTextSize(2);
+
+    if (bottomPlaceholderActive && outputText.length() == 0) {
+      tft.setTextColor(ILI9341_GRAY);
+      tft.print("Decoded Message");
+    } else {
+      tft.setTextColor(ILI9341_WHITE);
+      tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
+    }
+
+    tft.fillRect(boxWidth + 10, textAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+    tft.drawRect(boxWidth + 10, textAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setCursor(boxWidth + 10 + (buttonWidth - 12) / 2, textAreaY + (buttonHeight - 16) / 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("<");
+
+    tft.fillRect(boxWidth + 40, textAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+    tft.drawRect(boxWidth + 40, textAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setCursor(boxWidth + 40 + (buttonWidth - 12) / 2, textAreaY + (buttonHeight - 16) / 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print(">");
+
+    tft.fillRect(boxWidth + 10, outputAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+    tft.drawRect(boxWidth + 10, outputAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setCursor(boxWidth + 10 + (buttonWidth - 12) / 2, outputAreaY + (buttonHeight - 16) / 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("<");
+
+    tft.fillRect(boxWidth + 40, outputAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
+    tft.drawRect(boxWidth + 40, outputAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setCursor(boxWidth + 40 + (buttonWidth - 12) / 2, outputAreaY + (buttonHeight - 16) / 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print(">");
+
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+
+    tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
+    tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+    tft.setCursor(exitButtonX + (exitButtonWidth - 48) / 2, exitButtonY + (exitButtonHeight - 16) / 2 + 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("EXIT");
+    screenDrawn = true;
+  }
+
+  if (isTopBoxSelected) {
+    if (digitalRead(BUTTON_PIN) == LOW && !buttonPressed) {
+      buttonPressed = true;
+      pressStartTime = millis();
+      digitalWrite(2, HIGH);
+      tone(BUZZER_PIN, buzzerFrequency);
+    }
+
+    if (digitalRead(BUTTON_PIN) == HIGH && buttonPressed) {
+      buttonPressed = false;
+      unsigned long pressTime = millis() - pressStartTime;
+      digitalWrite(2, LOW);
+      noTone(BUZZER_PIN);
+
+      if (pressTime < buttonPressTimingThreshold) {
+        inputText += ".";
+      } else {
+        inputText += "-";
+      }
+
+      outputText = morseToText(BUTTON_PIN, inputText, buttonPressTimingThreshold);
+      inputScrollOffset = max(0, (int)inputText.length() - visibleChars);
+      outputScrollOffset = max(0, (int)outputText.length() - visibleChars);
+
+      if (topPlaceholderActive && inputText.length() > 0) {
+        topPlaceholderActive = false;
+      }
+      if (bottomPlaceholderActive && outputText.length() > 0) {
+        bottomPlaceholderActive = false;
+      }
+
+      tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+      tft.setCursor(10, textAreaY + 8);
+      tft.setTextSize(2);
+
+      if (inputText.length() == 0 && topPlaceholderActive) {
+        tft.setTextColor(ILI9341_GRAY);
+        tft.print("Enter Code");
+      } else {
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+      }
+
+      tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+      tft.setCursor(10, outputAreaY + 8);
+      tft.setTextSize(2);
+
+      if (outputText.length() == 0 && bottomPlaceholderActive) {
+        tft.setTextColor(ILI9341_GRAY);
+        tft.print("Decoded Message");
+      } else {
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
+      }
+      lastButtonReleaseTime = millis();
+    }
+  }
+
+  if (isTopBoxSelected && !buttonPressed && (millis() - lastButtonReleaseTime >= letterTerminationDelay)) {
+    if (inputText.length() > 0) {
+      char lastChar = inputText.charAt(inputText.length() - 1);
+      if (lastChar != ' ' && lastChar != '/') {
+        inputText += " ";
+        outputText = morseToText(BUTTON_PIN, inputText, buttonPressTimingThreshold);
+        inputScrollOffset = max(0, (int)inputText.length() - visibleChars);
+        outputScrollOffset = max(0, (int)outputText.length() - visibleChars);
+
+        tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, textAreaY + 8);
+        tft.setTextSize(2);
+        if (inputText.length() == 0 && topPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Enter Code");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+        }
+
+        tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, outputAreaY + 8);
+        tft.setTextSize(2);
+        if (outputText.length() == 0 && bottomPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Decoded Message");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
+        }
+      }
+      lastButtonReleaseTime = millis();
+    }
+  }
+
+  TSPoint p = ts.getPoint();
+  if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+    int calX = (p.y * xCalM) + xCalC;
+    int calY = (p.x * yCalM) + yCalC;
+    if (calX >= spacebarX && calX <= spacebarX + spacebarWidth && calY >= spacebarY && calY <= spacebarY + spacebarHeight) {
+      if (isTopBoxSelected) {
+        if (inputText.length() > 0 && inputText.charAt(inputText.length() - 1) == ' ') {
+          inputText.remove(inputText.length() - 1);
+        }
+        inputText += " / ";
+        outputText = morseToText(BUTTON_PIN, inputText, buttonPressTimingThreshold);
+        inputScrollOffset = max(0, (int)inputText.length() - visibleChars);
+        outputScrollOffset = max(0, (int)outputText.length() - visibleChars);
+
+        tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, textAreaY + 8);
+        tft.setTextSize(2);
+
+        if (inputText.length() == 0 && topPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Enter Code");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+        }
+
+        tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, outputAreaY + 8);
+        tft.setTextSize(2);
+
+        if (outputText.length() == 0 && bottomPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Decoded Message");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
+        }
+        delay(50);
+      }
+    }
+
+    int deleteButtonX = spacebarX + spacebarWidth + 10;
+    int deleteButtonY = spacebarY;
+    int deleteButtonWidth = 100;
+    int deleteButtonHeight = spacebarHeight;
+
+    if (calX >= deleteButtonX && calX <= deleteButtonX + deleteButtonWidth && calY >= deleteButtonY && calY <= deleteButtonY + deleteButtonHeight) {
+      if (isTopBoxSelected) {
+        if (inputText.length() > 0) {
+          if (inputText.charAt(inputText.length() - 1) == ' ') {
+            inputText.remove(inputText.length() - 1);
+          }
+          int lastSpaceIndex = inputText.lastIndexOf(' ');
+          if (lastSpaceIndex == -1) {
+            inputText = "";
+          } else {
+            inputText.remove(lastSpaceIndex);
+          }
+        }
+
+        outputText = morseToText(BUTTON_PIN, inputText, buttonPressTimingThreshold);
+        inputScrollOffset = max(0, (int)inputText.length() - visibleChars);
+        outputScrollOffset = max(0, (int)outputText.length() - visibleChars);
+
+        if (inputText.length() == 0 || outputText.length() == 0) {
+          topPlaceholderActive = true;
+          bottomPlaceholderActive = true;
+        }
+
+        lastButtonReleaseTime = 0;
+
+        tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, textAreaY + 8);
+        tft.setTextSize(2);
+
+        if (inputText.length() == 0 && topPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Enter Code");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+        }
+
+        tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, outputAreaY + 8);
+        tft.setTextSize(2);
+
+        if (outputText.length() == 0 && bottomPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Decoded Message");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
+        }
+        delay(50);
+      }
+    }
+
+    if (calX >= 5 && calX <= 5 + boxWidth && calY >= textAreaY && calY <= textAreaY + inputBoxHeight) {
+      isTopBoxSelected = true;
+      if (topPlaceholderActive && inputText.length() == 0) {
+        topPlaceholderActive = false;
+      }
+    }
+
+    if (calX >= 5 && calX <= 5 + boxWidth && calY >= outputAreaY && calY <= outputAreaY + outputBoxHeight) {
+      isTopBoxSelected = false;
+      if (bottomPlaceholderActive && outputText.length() == 0) {
+        bottomPlaceholderActive = false;
+      }
+    }
+
+    if (calX > boxWidth + 10 && calX < boxWidth + 40 && calY > textAreaY && calY < textAreaY + buttonHeight) {
+      if (!isTopBoxSelected) isTopBoxSelected = true;
+      if (inputScrollOffset > 0) {
+        inputScrollOffset--;
+        tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, textAreaY + 8);
+        tft.setTextSize(2);
+
+        if (inputText.length() == 0 && topPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Enter Code");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+        }
+      }
+    }
+
+    if (calX > boxWidth + 40 && calX < boxWidth + 70 && calY > textAreaY && calY < textAreaY + buttonHeight) {
+      if (!isTopBoxSelected) isTopBoxSelected = true;
+      int maxOffset = max(0, (int)inputText.length() - visibleChars);
+      if (inputScrollOffset < maxOffset) {
+        inputScrollOffset++;
+        tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, textAreaY + 8);
+        tft.setTextSize(2);
+
+        if (inputText.length() == 0 && topPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Enter Code");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(inputText.substring(inputScrollOffset, inputScrollOffset + visibleChars));
+        }
+      }
+    }
+
+    if (calX > boxWidth + 10 && calX < boxWidth + 40 && calY > outputAreaY && calY < outputAreaY + buttonHeight) {
+      if (isTopBoxSelected) isTopBoxSelected = false;
+      if (outputScrollOffset > 0) {
+        outputScrollOffset--;
+        tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, outputAreaY + 8);
+        tft.setTextSize(2);
+
+        if (outputText.length() == 0 && bottomPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Decoded Message");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
+        }
+      }
+    }
+
+    if (calX > boxWidth + 40 && calX < boxWidth + 70 && calY > outputAreaY && calY < outputAreaY + buttonHeight) {
+      if (isTopBoxSelected) isTopBoxSelected = false;
+      int maxOffset = max(0, (int)outputText.length() - visibleChars);
+      if (outputScrollOffset < maxOffset) {
+        outputScrollOffset++;
+        tft.fillRect(6, outputAreaY + 1, boxWidth - 2, outputBoxHeight - 2, ILI9341_BLACK);
+        tft.setCursor(10, outputAreaY + 8);
+        tft.setTextSize(2);
+
+        if (outputText.length() == 0 && bottomPlaceholderActive) {
+          tft.setTextColor(ILI9341_GRAY);
+          tft.print("Decoded Message");
+        } else {
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
+        }
+      }
+    }
+
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+
+    if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+      screenDrawn = false;
+      currentState = STATE_MAIN_MENU;
+    }
+
+    uint16_t newTopColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
+    uint16_t newBottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
+    tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, newTopColor);
+    tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, newBottomColor);
   }
 }
 
