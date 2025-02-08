@@ -61,7 +61,7 @@ static bool previousWiFiStatus = false;
 int WPM = 15;
 long buzzerFrequency = 700;
 long buttonPressTimingThreshold = 500;
-long letterTerminationDelay = 1000;
+long letterTerminationDelay = 1500;
 
 enum AppState {
   STATE_STARTUP,
@@ -93,6 +93,8 @@ void setup() {
   tft.begin();
   tft.setRotation(1);
   tft.fillScreen(ILI9341_BLACK);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
 }
 
 void loop() {
@@ -1831,10 +1833,17 @@ void runDecodeScreen() {
   const int spacebarWidth = 140;
   const int spacebarHeight = 30;
   const int spacebarX = 5;
-  const int spacebarY = outputAreaY + outputBoxHeight + 10;
+  const int spacebarY = tft.height() - spacebarHeight - 10;
   static unsigned long lastButtonReleaseTime = 0;
   static bool buttonPressed = false;
   static unsigned long pressStartTime = 0;
+  const int nextLetterY = outputAreaY + outputBoxHeight + 10;
+
+  static bool timerActive = false;
+  static unsigned long timerStartTime = 0;
+  static String lastTimerDisplay = "";
+  static int timerX = -1;
+  static unsigned long lastTimerDisplayUpdate = 0;
 
   if (!screenDrawn) {
     resetState();
@@ -1852,7 +1861,7 @@ void runDecodeScreen() {
     tft.setTextSize(2);
     tft.print("Space");
 
-    int deleteButtonX = spacebarX + spacebarWidth + 10;
+    int deleteButtonX = spacebarX + spacebarWidth + 8;
     int deleteButtonY = spacebarY;
     int deleteButtonWidth = 100;
     int deleteButtonHeight = spacebarHeight;
@@ -1863,6 +1872,17 @@ void runDecodeScreen() {
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(2);
     tft.print("Delete");
+
+    int helpButtonX = deleteButtonX + deleteButtonWidth + 6;
+    int helpButtonY = deleteButtonY;
+    int helpButtonWidth = 60;
+    int helpButtonHeight = deleteButtonHeight;
+
+    tft.drawRect(helpButtonX, helpButtonY, helpButtonWidth, helpButtonHeight, ILI9341_YELLOW);
+    tft.setCursor(helpButtonX + (helpButtonWidth - 12) / 2, helpButtonY + (helpButtonHeight - 16) / 2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("?");
 
     uint16_t topColor = isTopBoxSelected ? ILI9341_GREEN : ILI9341_WHITE;
     tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, topColor);
@@ -1898,6 +1918,25 @@ void runDecodeScreen() {
       tft.setTextColor(ILI9341_WHITE);
       tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
     }
+
+    tft.setCursor(8, nextLetterY + 5);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("Next Letter in: ");
+
+    if (timerX == -1) {
+      timerX = tft.getCursorX();
+    }
+    
+    tft.setCursor(timerX, nextLetterY + 5);
+    tft.setTextColor(ILI9341_RED);
+    tft.setTextSize(2);
+    tft.print("0.00");
+    tft.setTextSize(1);
+    tft.setCursor(timerX + 50, nextLetterY + 13);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print("sec(s)");
+    lastTimerDisplay = "0.00";
 
     tft.fillRect(boxWidth + 10, textAreaY, buttonWidth, buttonHeight, ILI9341_BLUE);
     tft.drawRect(boxWidth + 10, textAreaY, buttonWidth, buttonHeight, ILI9341_WHITE);
@@ -1945,14 +1984,14 @@ void runDecodeScreen() {
     if (digitalRead(BUTTON_PIN) == LOW && !buttonPressed) {
       buttonPressed = true;
       pressStartTime = millis();
-      digitalWrite(2, HIGH);
+      digitalWrite(LED_PIN, HIGH);
       tone(BUZZER_PIN, buzzerFrequency);
     }
 
     if (digitalRead(BUTTON_PIN) == HIGH && buttonPressed) {
       buttonPressed = false;
       unsigned long pressTime = millis() - pressStartTime;
-      digitalWrite(2, LOW);
+      digitalWrite(LED_PIN, LOW);
       noTone(BUZZER_PIN);
 
       if (pressTime < buttonPressTimingThreshold) {
@@ -1996,6 +2035,8 @@ void runDecodeScreen() {
         tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
       }
       lastButtonReleaseTime = millis();
+      timerActive = true;
+      timerStartTime = millis();
     }
   }
 
@@ -2072,10 +2113,18 @@ void runDecodeScreen() {
           tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
         }
         delay(50);
+
+        timerActive = false;
+        lastTimerDisplay = "0.00";
+        tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+        tft.setCursor(timerX, nextLetterY + 5);
+        tft.setTextColor(ILI9341_RED);
+        tft.setTextSize(2);
+        tft.print("0.00");
       }
     }
 
-    int deleteButtonX = spacebarX + spacebarWidth + 10;
+    int deleteButtonX = spacebarX + spacebarWidth + 8;
     int deleteButtonY = spacebarY;
     int deleteButtonWidth = 100;
     int deleteButtonHeight = spacebarHeight;
@@ -2129,7 +2178,25 @@ void runDecodeScreen() {
           tft.print(outputText.substring(outputScrollOffset, outputScrollOffset + visibleChars));
         }
         delay(50);
+
+        timerActive = false;
+        lastTimerDisplay = "0.00";
+        tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+        tft.setCursor(timerX, nextLetterY + 5);
+        tft.setTextColor(ILI9341_RED);
+        tft.setTextSize(2);
+        tft.print("0.00");
       }
+    }
+
+    int helpButtonX = deleteButtonX + deleteButtonWidth + 6;
+    int helpButtonY = deleteButtonY;
+    int helpButtonWidth = 60;
+    int helpButtonHeight = deleteButtonHeight;
+
+    if (calX >= helpButtonX && calX <= helpButtonX + helpButtonWidth && calY >= helpButtonY && calY <= helpButtonY + helpButtonHeight) {
+      screenDrawn = false;
+      currentState = STATE_GUIDE;
     }
 
     if (calX >= 5 && calX <= 5 + boxWidth && calY >= textAreaY && calY <= textAreaY + inputBoxHeight) {
@@ -2234,6 +2301,60 @@ void runDecodeScreen() {
     uint16_t newBottomColor = isTopBoxSelected ? ILI9341_WHITE : ILI9341_GREEN;
     tft.drawRect(5, textAreaY, boxWidth, inputBoxHeight, newTopColor);
     tft.drawRect(5, outputAreaY, boxWidth, outputBoxHeight, newBottomColor);
+  }
+
+  unsigned long now = millis();
+  if (buttonPressed) {
+    if (now - lastTimerDisplayUpdate >= 100) {
+      lastTimerDisplayUpdate = now;
+      String fullTime = String(letterTerminationDelay / 1000.0, 2);
+      if (fullTime != lastTimerDisplay) {
+        tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+        tft.setCursor(timerX, nextLetterY + 5);
+        tft.setTextColor(ILI9341_RED);
+        tft.setTextSize(2);
+        tft.print(fullTime);
+        lastTimerDisplay = fullTime;
+      }
+    }
+  } else if (timerActive) {
+    if (now - lastTimerDisplayUpdate >= 100) {
+      lastTimerDisplayUpdate = now;
+      unsigned long elapsed = now - timerStartTime;
+      if (elapsed >= letterTerminationDelay) {
+        timerActive = false;
+        String newTimerDisplay = "0.00";
+        if (newTimerDisplay != lastTimerDisplay) {
+          tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+          tft.setCursor(timerX, nextLetterY + 5);
+          tft.setTextColor(ILI9341_RED);
+          tft.setTextSize(2);
+          tft.print(newTimerDisplay);
+          lastTimerDisplay = newTimerDisplay;
+        }
+      } else {
+        float remaining = (letterTerminationDelay - elapsed) / 1000.0;
+        String newTimerDisplay = String(remaining, 2);
+        if (newTimerDisplay != lastTimerDisplay) {
+          tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+          tft.setCursor(timerX, nextLetterY + 5);
+          tft.setTextColor(ILI9341_RED);
+          tft.setTextSize(2);
+          tft.print(newTimerDisplay);
+          lastTimerDisplay = newTimerDisplay;
+        }
+      }
+    }
+  } else {
+    if (lastTimerDisplay != "0.00" && now - lastTimerDisplayUpdate >= 100) {
+      lastTimerDisplayUpdate = now;
+      tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+      tft.setCursor(timerX, nextLetterY + 5);
+      tft.setTextColor(ILI9341_RED);
+      tft.setTextSize(2);
+      tft.print("0.00");
+      lastTimerDisplay = "0.00";
+    }
   }
 }
 
