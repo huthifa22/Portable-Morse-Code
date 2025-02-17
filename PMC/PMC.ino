@@ -7,6 +7,7 @@
 #include "TouchScreen.h"
 #include <vector>
 #include <Fonts/FreeSansBoldOblique18pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
 
 // TFT Display SPI Pins
 #define TFT_CLK 13
@@ -62,6 +63,8 @@ int WPM = 15;
 long buzzerFrequency = 700;
 long buttonPressTimingThreshold = 500;
 long letterTerminationDelay = 1500;
+int randomWordMinLength = 2;
+int randomWordMaxLength = 10;
 
 enum AppState {
   STATE_STARTUP,
@@ -137,7 +140,7 @@ void loop() {
       break;
 
     case STATE_GAME:
-      runDummyState("Game");
+      runGameScreen();
       break;
 
     case STATE_TOOLS:
@@ -1922,12 +1925,12 @@ void runDecodeScreen() {
     tft.setCursor(8, nextLetterY + 5);
     tft.setTextColor(ILI9341_WHITE);
     tft.setTextSize(2);
-    tft.print("Next Letter in: ");
+    tft.print("Next Letter In: ");
 
     if (timerX == -1) {
       timerX = tft.getCursorX();
     }
-    
+
     tft.setCursor(timerX, nextLetterY + 5);
     tft.setTextColor(ILI9341_RED);
     tft.setTextSize(2);
@@ -2353,6 +2356,348 @@ void runDecodeScreen() {
       tft.setTextColor(ILI9341_RED);
       tft.setTextSize(2);
       tft.print("0.00");
+      lastTimerDisplay = "0.00";
+    }
+  }
+}
+
+void runGameScreen() {
+
+  static const char* fallbackWordsByLength[11][5] = {
+    { "", "", "", "", "" },
+    { "A", "I", "O", "U", "Y" },                                              // 1-letter words
+    { "of", "to", "it", "by", "in" },                                         // 2-letter words
+    { "cat", "dog", "run", "sky", "car" },                                    // 3-letter words
+    { "code", "love", "hate", "cool", "fast" },                               // 4-letter words
+    { "hello", "world", "quick", "brown", "smart" },                          // 5-letter words
+    { "morse", "system", "device", "puzzle", "secret" },                      // 6-letter words
+    { "network", "program", "display", "example", "control" },                // 7-letter words
+    { "computer", "keyboard", "function", "variable", "solution" },           // 8-letter words
+    { "generator", "mechanism", "framework", "procedure", "interface" },      // 9-letter words
+    { "microphone", "innovation", "technology", "perfection", "expression" }  // 10-letter words
+  };
+
+  static String displayWord = "";
+  static bool buttonPressed = false;
+  static unsigned long pressStartTime = 0;
+  static bool timerActive = false;
+  static unsigned long timerStartTime = 0;
+  static String lastTimerDisplay = "";
+  static int timerX = -1;
+  static unsigned long lastTimerDisplayUpdate = 0;
+  static bool screenDrawn = false;
+  static String currentInput = "";
+  static String currentDecoded = "";
+  static int streak = 0;
+
+  const int nextLetterY = tft.height() - 40;
+
+  if (!screenDrawn) {
+    resetState();
+    streak = 0;
+    currentInput = "";
+    currentDecoded = "";
+    buttonPressed = false;
+    timerActive = false;
+    timerStartTime = 0;
+    lastTimerDisplayUpdate = 0;
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    tft.fillScreen(ILI9341_BLACK);
+
+    tft.setFont();
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(6, 9);
+    tft.print("Morse Game");
+
+    tft.fillRect(6, 45, 150, 25, ILI9341_BLACK);
+    tft.setCursor(6, 45);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.print("Streak: ");
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print(streak);
+
+    tft.fillRect(tft.width() - 60, 5, 60, 25, ILI9341_RED);
+    tft.drawRect(tft.width() - 60, 5, 60, 25, ILI9341_WHITE);
+    tft.setCursor(tft.width() - 60 + (60 - 48) / 2, 5 + ((25 - 16) / 2) + 2);
+    tft.print("EXIT");
+
+    tft.setFont();
+    tft.setTextSize(2);
+    tft.setCursor(8, nextLetterY + 5);
+    tft.print("Next Letter In: ");
+
+    if (timerX == -1) {
+      timerX = tft.getCursorX();
+    }
+
+    tft.setFont();
+    tft.setTextSize(2);
+    tft.setCursor(timerX, nextLetterY + 5);
+    tft.setTextColor(ILI9341_RED);
+    tft.print("0.00");
+
+    tft.setTextSize(1);
+    tft.setCursor(timerX + 50, nextLetterY + 13);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print("sec(s)");
+    lastTimerDisplay = "0.00";
+
+    int randomWordLength = random(randomWordMinLength, randomWordMaxLength + 1);
+
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFiClient client;
+      if (client.connect("random-word-api.herokuapp.com", 80)) {
+        String request = "GET /word?number=1&length=" + String(randomWordLength) + " HTTP/1.1";
+        client.println(request);
+        client.println("Host: random-word-api.herokuapp.com");
+        client.println("Connection: close");
+        client.println();
+        unsigned long timeout = millis();
+
+        while (!client.available() && millis() - timeout < 600) {
+        }
+
+        String response = "";
+
+        while (client.available()) {
+          response += (char)client.read();
+        }
+
+        int bodyIndex = response.indexOf("\r\n\r\n");
+        if (bodyIndex != -1) {
+          String json = response.substring(bodyIndex + 4);
+          json.trim();
+          if (json.startsWith("[\"")) {
+            json.remove(0, 2);
+            int endQuote = json.indexOf("\"");
+            if (endQuote != -1) {
+              displayWord = json.substring(0, endQuote);
+            }
+          }
+        }
+        client.stop();
+      }
+    }
+
+    if (displayWord == "") {
+      randomSeed(analogRead(0));
+      int index = random(0, 5);
+      displayWord = fallbackWordsByLength[randomWordLength][index];
+    }
+
+    tft.setFont(&FreeSans9pt7b);
+    tft.setTextSize(2);
+    int16_t x1, y1;
+    uint16_t w, h;
+    tft.getTextBounds(displayWord, 0, 0, &x1, &y1, &w, &h);
+    int16_t centerX = (tft.width() - w) / 2;
+    int16_t centerY = (tft.height() - h) / 2;
+    tft.setCursor(centerX, centerY + 20);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print(displayWord);
+
+    screenDrawn = true;
+  }
+
+  TSPoint p = ts.getPoint();
+  if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+    int calX = (p.y * xCalM) + xCalC;
+    int calY = (p.x * yCalM) + yCalC;
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+
+    if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+      tft.setFont();
+      tft.setTextSize(2);
+      screenDrawn = false;
+      currentState = STATE_MAIN_MENU;
+      displayWord = "";
+      return;
+    }
+  }
+
+  if (digitalRead(BUTTON_PIN) == LOW && !buttonPressed) {
+    buttonPressed = true;
+    pressStartTime = millis();
+    digitalWrite(LED_PIN, HIGH);
+    tone(BUZZER_PIN, buzzerFrequency);
+  }
+
+  if (digitalRead(BUTTON_PIN) == HIGH && buttonPressed) {
+    buttonPressed = false;
+    unsigned long pressTime = millis() - pressStartTime;
+    digitalWrite(LED_PIN, LOW);
+    noTone(BUZZER_PIN);
+
+    if (pressTime < buttonPressTimingThreshold) {
+      currentInput += ".";
+    } else {
+      currentInput += "-";
+    }
+
+    timerActive = true;
+    timerStartTime = millis();
+    lastTimerDisplayUpdate = millis();
+  }
+
+  unsigned long now = millis();
+  if (buttonPressed) {
+    if (now - lastTimerDisplayUpdate >= 100) {
+      lastTimerDisplayUpdate = now;
+      String fullTime = String(letterTerminationDelay / 1000.0, 2);
+
+      tft.setFont();
+      tft.setTextSize(2);
+      tft.setCursor(timerX, nextLetterY + 5);
+      tft.setTextColor(ILI9341_RED);
+      tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+      tft.print(fullTime);
+
+      tft.setTextSize(1);
+      tft.setCursor(timerX + 50, nextLetterY + 13);
+      tft.setTextColor(ILI9341_WHITE);
+      tft.print("sec(s)");
+      lastTimerDisplay = fullTime;
+    }
+  } else if (timerActive) {
+    if (now - lastTimerDisplayUpdate >= 100) {
+      lastTimerDisplayUpdate = now;
+      unsigned long elapsed = now - timerStartTime;
+      if (elapsed >= letterTerminationDelay) {
+        tft.setFont();
+        tft.setTextSize(2);
+        tft.setCursor(timerX, nextLetterY + 5);
+        tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+        tft.setTextColor(ILI9341_RED);
+        tft.print("0.00");
+
+        tft.setTextSize(1);
+        tft.setCursor(timerX + 50, nextLetterY + 13);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print("sec(s)");
+        lastTimerDisplay = "0.00";
+        timerActive = false;
+
+        if (currentInput.length() > 0) {
+          char letter = decodeSingleMorse(currentInput);
+          currentDecoded += letter;
+          currentInput = "";
+        }
+
+        if (currentDecoded.length() == displayWord.length()) {
+          bool isCorrect = currentDecoded.equalsIgnoreCase(displayWord);
+          tft.setFont(&FreeSans9pt7b);
+          tft.setTextSize(2);
+          int16_t x1, y1;
+          uint16_t w, h;
+          tft.getTextBounds(displayWord, 0, 0, &x1, &y1, &w, &h);
+          int16_t centerX2 = (tft.width() - w) / 2;
+          int16_t centerY2 = (tft.height() - h) / 2;
+          tft.fillRect(0, centerY2 - 20, tft.width(), h + 50, ILI9341_BLACK);
+          tft.setCursor(centerX2, centerY2 + 20);
+          tft.setTextColor(isCorrect ? ILI9341_GREEN : ILI9341_RED);
+          tft.print(displayWord);
+
+          delay(1000);
+
+          if (isCorrect) {
+            streak++;
+          } else {
+            streak = 0;
+          }
+
+          tft.fillRect(6, 45, 150, 25, ILI9341_BLACK);
+          tft.setFont();
+          tft.setTextSize(2);
+          tft.setCursor(6, 45);
+          tft.setTextColor(ILI9341_YELLOW);
+          tft.print("Streak: ");
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(streak);
+
+          String newLetter = "";
+          int randomWordLength = random(randomWordMinLength, randomWordMaxLength + 1);
+          if (WiFi.status() == WL_CONNECTED) {
+            WiFiClient client;
+            if (client.connect("random-word-api.herokuapp.com", 80)) {
+              String request = "GET /word?number=1&length=" + String(randomWordLength) + " HTTP/1.1";
+              client.println(request);
+              client.println("Host: random-word-api.herokuapp.com");
+              client.println("Connection: close");
+              client.println();
+              unsigned long timeout = millis();
+              while (!client.available() && millis() - timeout < 400) {
+              }
+              String response = "";
+              while (client.available()) {
+                response += (char)client.read();
+              }
+              int bodyIndex = response.indexOf("\r\n\r\n");
+              if (bodyIndex != -1) {
+                String json = response.substring(bodyIndex + 4);
+                json.trim();
+                if (json.startsWith("[\"")) {
+                  json.remove(0, 2);
+                  int endQuote = json.indexOf("\"");
+                  if (endQuote != -1) {
+                    newLetter = json.substring(0, endQuote);
+                  }
+                }
+              }
+              client.stop();
+            }
+          }
+
+          if (newLetter == "") {
+            int index = random(0, 5);
+            newLetter = fallbackWordsByLength[randomWordLength][index];
+          }
+          displayWord = newLetter;
+          tft.setFont(&FreeSans9pt7b);
+          tft.setTextSize(2);
+          tft.getTextBounds(displayWord, 0, 0, &x1, &y1, &w, &h);
+          int16_t centerX2_new = (tft.width() - w) / 2;
+          int16_t centerY2_new = (tft.height() - h) / 2;
+          tft.fillRect(0, centerY2_new - 20, tft.width(), h + 50, ILI9341_BLACK);
+          tft.setCursor(centerX2_new, centerY2_new + 20);
+          tft.setTextColor(ILI9341_WHITE);
+          tft.print(displayWord);
+          currentDecoded = "";
+        }
+      } else {
+        unsigned long remainMs = letterTerminationDelay - elapsed;
+        float remaining = ((float)remainMs) / 1000.0;
+        String newTimerDisplay = String(remaining, 2);
+        tft.setFont();
+        tft.setTextSize(2);
+        tft.setCursor(timerX, nextLetterY + 5);
+        tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+        tft.setTextColor(ILI9341_RED);
+        tft.print(newTimerDisplay);
+        tft.setTextSize(1);
+        tft.setCursor(timerX + 50, nextLetterY + 13);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print("sec(s)");
+        lastTimerDisplay = newTimerDisplay;
+      }
+    }
+  } else {
+    if (lastTimerDisplay != "0.00" && now - lastTimerDisplayUpdate >= 100) {
+      lastTimerDisplayUpdate = now;
+      tft.setFont();
+      tft.setTextSize(2);
+      tft.setCursor(timerX, nextLetterY + 5);
+      tft.fillRect(timerX, nextLetterY + 5, 50, 20, ILI9341_BLACK);
+      tft.setTextColor(ILI9341_RED);
+      tft.print("0.00");
+      tft.setTextSize(1);
+      tft.setCursor(timerX + 50, nextLetterY + 13);
+      tft.setTextColor(ILI9341_WHITE);
+      tft.print("sec(s)");
       lastTimerDisplay = "0.00";
     }
   }
