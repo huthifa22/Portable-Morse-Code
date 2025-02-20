@@ -63,8 +63,8 @@ int WPM = 15;
 long buzzerFrequency = 700;
 long buttonPressTimingThreshold = 500;
 long letterTerminationDelay = 1500;
-int randomWordMinLength = 2;
-int randomWordMaxLength = 10;
+int randomWordMinLength = 1;
+int randomWordMaxLength = 1;
 
 enum AppState {
   STATE_STARTUP,
@@ -2392,6 +2392,10 @@ void runGameScreen() {
 
   const int nextLetterY = tft.height() - 40;
 
+  static unsigned long localLetterTerminationDelay = letterTerminationDelay;
+  static const unsigned long MIN_LETTER_TERMINATION_DELAY = 300;
+  static const unsigned long DELAY_DECREMENT = 100;
+
   if (!screenDrawn) {
     resetState();
     streak = 0;
@@ -2401,6 +2405,7 @@ void runGameScreen() {
     timerActive = false;
     timerStartTime = 0;
     lastTimerDisplayUpdate = 0;
+    localLetterTerminationDelay = letterTerminationDelay;
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     tft.fillScreen(ILI9341_BLACK);
 
@@ -2548,7 +2553,7 @@ void runGameScreen() {
   if (buttonPressed) {
     if (now - lastTimerDisplayUpdate >= 100) {
       lastTimerDisplayUpdate = now;
-      String fullTime = String(letterTerminationDelay / 1000.0, 2);
+      String fullTime = String(localLetterTerminationDelay / 1000.0, 2);
 
       tft.setFont();
       tft.setTextSize(2);
@@ -2567,7 +2572,7 @@ void runGameScreen() {
     if (now - lastTimerDisplayUpdate >= 100) {
       lastTimerDisplayUpdate = now;
       unsigned long elapsed = now - timerStartTime;
-      if (elapsed >= letterTerminationDelay) {
+      if (elapsed >= localLetterTerminationDelay) {
         tft.setFont();
         tft.setTextSize(2);
         tft.setCursor(timerX, nextLetterY + 5);
@@ -2606,8 +2611,28 @@ void runGameScreen() {
 
           if (isCorrect) {
             streak++;
+            if (streak % 5 == 0 && localLetterTerminationDelay > MIN_LETTER_TERMINATION_DELAY) {
+              localLetterTerminationDelay -= DELAY_DECREMENT;
+
+              const char* msg = "Time Decreased!";
+              tft.setFont(&FreeSans9pt7b);
+              tft.setTextSize(2);
+              int16_t x1, y1;
+              uint16_t w, h;
+              tft.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+              int16_t centerX = (tft.width() - w) / 2;
+              int16_t centerY = (tft.height() - h) / 2;
+
+              tft.fillRect(0, centerY - 20, tft.width(), h + 50, ILI9341_BLACK);
+              tft.setCursor(centerX, centerY + 20);
+              tft.setTextColor(ILI9341_RED);
+              tft.print(msg);
+              tft.setFont();
+              delay(2000);
+            }
           } else {
             streak = 0;
+            localLetterTerminationDelay = letterTerminationDelay;
           }
 
           tft.fillRect(6, 45, 150, 25, ILI9341_BLACK);
