@@ -71,6 +71,8 @@ enum AppState {
   STATE_WIFI_SETUP,
   STATE_WIFI_CREDENTIALS,
   STATE_CONNECTION,
+  STATE_RECONNECTION,
+  STATE_WIFI_DISCONNECT_CLOUD_RECONNECT,
   STATE_MAIN_MENU,
   STATE_MAIL,
   STATE_GUIDE,
@@ -116,6 +118,14 @@ void loop() {
 
     case STATE_CONNECTION:
       runConnectionState();
+      break;
+
+    case STATE_RECONNECTION:
+      runReconnectionState();
+      break;
+
+    case STATE_WIFI_DISCONNECT_CLOUD_RECONNECT:
+      runWiFiDisconnectCloudReconnectScreen();
       break;
 
     case STATE_MAIN_MENU:
@@ -836,6 +846,155 @@ void runConnectionState() {
   currentState = STATE_MAIN_MENU;
 }
 
+void runReconnectionState() {
+  tft.fillScreen(ILI9341_BLACK);
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+
+  int messageX = 10;
+  int line1Y = 10;
+  int progressBarX = 20;
+  int progressBarY = tft.height() / 2 - 10;
+  int progressBarWidth = tft.width() - 40;
+  int progressBarHeight = 20;
+
+  tft.drawRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_WHITE);
+  tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+  tft.print("0%");
+
+  WiFiConnectionHandler ArduinoIoTPreferredConnection(wifiSSID, wifiPassword);
+  initProperties();
+  ArduinoCloud.begin(ArduinoIoTPreferredConnection, false);
+  setDebugMessageLevel(2);
+  ArduinoCloud.printDebugInfo();
+
+  tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_BLACK);
+  tft.drawRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_WHITE);
+
+  tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+  tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+  tft.print("0%");
+
+  tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+  tft.setCursor(messageX, line1Y);
+  tft.print("Reconnecting to Cloud...");
+
+  int cloudRetryCount = 0;
+  const int maxCloudRetries = 10;
+  int cloudProgressStep = progressBarWidth / maxCloudRetries;
+
+  while (cloudRetryCount < maxCloudRetries) {
+    ArduinoCloud.update();
+    delay(1000);
+
+    int cloudProgress = cloudProgressStep * (cloudRetryCount + 1);
+    tft.fillRect(progressBarX, progressBarY, cloudProgress, progressBarHeight, ILI9341_YELLOW);
+
+    int cloudPercentage = ((cloudRetryCount + 1) * 100) / maxCloudRetries;
+    tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+    tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+    tft.print(cloudPercentage);
+    tft.print("%");
+
+    if (ArduinoCloud.connected()) {
+      tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_GREEN);
+      tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+      tft.setCursor(progressBarX + progressBarWidth - 30, progressBarY + progressBarHeight + 10);
+      tft.print("100%");
+      tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+      tft.setCursor(messageX, line1Y);
+      tft.print("Reconnected to Cloud");
+      Serial.println("Device reconnected to Arduino Cloud:");
+      Serial.print("Device ID: ");
+      Serial.println(ArduinoCloud.getDeviceId());
+      delay(2000);
+      currentState = STATE_MAIN_MENU;
+      return;
+    }
+
+    cloudRetryCount++;
+  }
+
+  tft.fillRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_RED);
+  tft.fillRect(progressBarX + progressBarWidth - 52, progressBarY + progressBarHeight + 5, 100, 20, ILI9341_BLACK);
+  tft.fillRect(messageX, line1Y, tft.width(), 40, ILI9341_BLACK);
+  tft.setCursor(messageX, line1Y);
+  tft.print("Cloud Connection Failed.");
+  delay(2000);
+  currentState = STATE_MAIN_MENU;
+}
+
+void runWiFiDisconnectCloudReconnectScreen() {
+  if (!screenDrawn) {
+    resetState();
+    tft.fillScreen(ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+
+    const char* prompt1 = "Disconnect WiFi";
+    const char* prompt2 = "or Reconnect Cloud?";
+    int16_t x1, y1;
+    uint16_t w, h;
+
+    tft.getTextBounds(prompt1, 0, 0, &x1, &y1, &w, &h);
+    int16_t centerX = (tft.width() - w) / 2;
+    tft.setCursor(centerX, 20);
+    tft.print(prompt1);
+
+    tft.getTextBounds(prompt2, 0, 0, &x1, &y1, &w, &h);
+    centerX = (tft.width() - w) / 2;
+    tft.setCursor(centerX, 45);
+    tft.print(prompt2);
+
+    int16_t buttonWidth = 140;
+    int16_t buttonHeight = 50;
+    int16_t buttonY = (tft.height() / 4) + 50;
+    int16_t disconnectX = tft.width() / 4 - (buttonWidth / 2);
+    int16_t reconnectX = (tft.width() * 3 / 4) - (buttonWidth / 2);
+
+    tft.fillRect(disconnectX, buttonY, buttonWidth, buttonHeight, ILI9341_RED);
+    tft.getTextBounds("Disconnect", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(disconnectX + (buttonWidth - w) / 2, buttonY + (buttonHeight - h) / 2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.print("Disconnect");
+
+    tft.fillRect(reconnectX, buttonY, buttonWidth, buttonHeight, ILI9341_GREEN);
+    tft.getTextBounds("Reconnect", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(reconnectX + (buttonWidth - w) / 2, buttonY + (buttonHeight - h) / 2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.print("Reconnect");
+
+    screenDrawn = true;
+  }
+
+  TSPoint p = ts.getPoint();
+  if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+    int calX = (p.y * xCalM) + xCalC;
+    int calY = (p.x * yCalM) + yCalC;
+
+    int16_t buttonWidth = 140;
+    int16_t buttonHeight = 50;
+    int16_t buttonY = (tft.height() / 4) + 50;
+    int16_t disconnectX = tft.width() / 4 - (buttonWidth / 2);
+    int16_t reconnectX = (tft.width() * 3 / 4) - (buttonWidth / 2);
+
+    if (calX > disconnectX && calX < disconnectX + buttonWidth && calY > buttonY && calY < buttonY + buttonHeight) {
+      WiFi.disconnect();
+      delay(500);
+      messageQueue.clear();
+      screenDrawn = false;
+      currentState = STATE_MAIN_MENU;
+    }
+
+    if (calX > reconnectX && calX < reconnectX + buttonWidth && calY > buttonY && calY < buttonY + buttonHeight) {
+      screenDrawn = false;
+      currentState = STATE_RECONNECTION;
+    }
+  }
+}
+
 void runMainMenuScreen() {
   static int previousMessageCount = -1;
 
@@ -954,7 +1113,11 @@ void runMainMenuScreen() {
 
     if (calX > wifiButtonX && calX < wifiButtonX + wifiButtonWidth && calY > wifiButtonY && calY < wifiButtonY + wifiButtonHeight) {
       screenDrawn = false;
-      currentState = STATE_WIFI_SETUP;
+      if (WiFi.status() == WL_CONNECTED) {
+        currentState = STATE_WIFI_DISCONNECT_CLOUD_RECONNECT;
+      } else {
+        currentState = STATE_WIFI_SETUP;
+      }
     }
 
     // Check if a tile is clicked
