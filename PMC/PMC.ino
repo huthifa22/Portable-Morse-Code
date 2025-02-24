@@ -57,6 +57,7 @@ String textMessage = "";
 std::vector<String> messageQueue;
 int currentMessageIndex = -1;
 static bool previousWiFiStatus = false;
+static bool previousCloudStatus = false;
 
 // User Customizable Variables
 int WPM = 15;
@@ -1018,14 +1019,15 @@ void runMainMenuScreen() {
     tft.setTextSize(2);
     tft.println("Main Menu");
 
-    bool isConnected = (WiFi.status() == WL_CONNECTED);
-    int wifiSymbolX = tft.width() - 20;
-    int wifiSymbolY = 35;
-
     // Wifi button on the Top right of the Main Menu
     // If Wifi is connected its Blue, if not its white with an 'X' Symbol
-    drawWiFiSymbol(wifiSymbolX, wifiSymbolY, isConnected);
-    previousWiFiStatus = isConnected;
+    int wifiSymbolX = tft.width() - 20;
+    int wifiSymbolY = 35;
+    bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+    bool cloudConnected = wifiConnected && ArduinoCloud.connected();
+
+    drawWiFiSymbol(wifiSymbolX, wifiSymbolY, wifiConnected, cloudConnected);
+    previousWiFiStatus = wifiConnected;
 
     int mailButtonX = wifiSymbolX - 100;
     int mailButtonY = 10;
@@ -1067,13 +1069,16 @@ void runMainMenuScreen() {
     previousMessageCount = -1;
   }
 
-  bool isConnected = (WiFi.status() == WL_CONNECTED);
-  if (isConnected != previousWiFiStatus) {
-    drawWiFiSymbol(tft.width() - 20, 35, isConnected);
-    previousWiFiStatus = isConnected;
+  bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+  bool cloudConnected = wifiConnected && ArduinoCloud.connected();
+
+  if (wifiConnected != previousWiFiStatus || cloudConnected != previousCloudStatus) {
+    drawWiFiSymbol(tft.width() - 20, 35, wifiConnected, cloudConnected);
+    previousWiFiStatus = wifiConnected;
+    previousCloudStatus = cloudConnected;
   }
 
-  int currentMessageCount = messageQueue.size();
+  int currentMessageCount = (cloudConnected) ? messageQueue.size() : 0;
   if (currentMessageCount != previousMessageCount) {
     int mailButtonX = tft.width() - 120;
     int mailButtonY = 10;
@@ -1152,9 +1157,9 @@ void runMainMenuScreen() {
   }
 }
 
-void drawWiFiSymbol(int centerX, int centerY, bool isConnected) {
-  uint16_t centerDotColor = isConnected ? tft.color565(0, 255, 0) : ILI9341_WHITE;
-  uint16_t arcColor = isConnected ? tft.color565(0, 255, 0) : ILI9341_WHITE;
+void drawWiFiSymbol(int centerX, int centerY, bool wifiConnected, bool cloudConnected) {
+  uint16_t centerDotColor = wifiConnected ? tft.color565(0, 255, 0) : ILI9341_GRAY;
+  uint16_t arcColor = wifiConnected ? tft.color565(0, 255, 0) : ILI9341_GRAY;
 
   tft.fillCircle(centerX, centerY - 4, 2, centerDotColor);
 
@@ -1168,7 +1173,18 @@ void drawWiFiSymbol(int centerX, int centerY, bool isConnected) {
     }
   }
 
-  if (!isConnected) {
+  if (wifiConnected && !cloudConnected) {
+    int verticalOffset = 13;
+    int barHeight = 12;
+    int barWidth = 4;
+
+    tft.fillRect(centerX - barWidth / 2, centerY - barHeight / 2 - verticalOffset, barWidth, barHeight, ILI9341_WHITE);
+    int dotRadius = 2;
+    int dotCenterY = centerY - verticalOffset + barHeight / 2 + dotRadius + 1;
+    tft.fillCircle(centerX, dotCenterY, dotRadius, ILI9341_WHITE);
+  }
+
+  else if (!wifiConnected) {
     int xSize = 7;
     uint16_t xColor = ILI9341_RED;
     int xOffsetY = -15;
