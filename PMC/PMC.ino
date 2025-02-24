@@ -60,11 +60,11 @@ static bool previousWiFiStatus = false;
 
 // User Customizable Variables
 int WPM = 15;
-long buzzerFrequency = 700;
+long buzzerFrequency = 350;
 long buttonPressTimingThreshold = 500;
 long letterTerminationDelay = 1500;
-int randomWordMinLength = 1;
-int randomWordMaxLength = 1;
+int randomWordMinLength = 2;
+int randomWordMaxLength = 5;
 
 enum AppState {
   STATE_STARTUP,
@@ -154,11 +154,11 @@ void loop() {
       break;
 
     case STATE_TOOLS:
-      runDummyState("Tools");
+      runToolsScreen();
       break;
 
     case STATE_OTHER:
-      runDummyState("Other");
+      runOtherScreen();
       break;
   }
 
@@ -2891,21 +2891,482 @@ void runGameScreen() {
   }
 }
 
-void runDummyState(const char* stateName) {
+void runToolsScreen() {
   if (!screenDrawn) {
     resetState();
     tft.fillScreen(ILI9341_BLACK);
+
     tft.setTextSize(2);
     tft.setTextColor(ILI9341_WHITE);
     tft.setCursor(10, 10);
-    tft.print(stateName);
-    tft.print(" Screen");
+    tft.print("Tools");
+
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+
+    tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
+    int16_t exitTextX = exitButtonX + (exitButtonWidth - 48) / 2;
+    int16_t exitTextY = exitButtonY + (exitButtonHeight - 16) / 2 + 2;
+    tft.setCursor(exitTextX, exitTextY);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("EXIT");
+    tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+
+    int uiY = 50;
+    int buttonSpacing = 8;
+    int valueSpacing = 1;
+    int buttonWidth = 25;
+    int buttonHeight = 23;
+    int currentBoxWidth = 50;
+    int currentBoxHeight = buttonHeight;
+
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(10, uiY + (buttonHeight - 16) / 2);
+    tft.print("LED/Buzzer WPM");
+
+    int minusButtonX = exitButtonX;
+    int minusButtonY = uiY;
+    int currentBoxX = minusButtonX - valueSpacing - currentBoxWidth;
+    int currentBoxY = uiY;
+    int plusButtonX = minusButtonX + buttonWidth + buttonSpacing;
+    int plusButtonY = uiY;
+
+    tft.drawRect(currentBoxX, currentBoxY, currentBoxWidth, currentBoxHeight, ILI9341_WHITE);
+    tft.fillRect(currentBoxX, currentBoxY, currentBoxWidth, currentBoxHeight, ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setCursor(currentBoxX, currentBoxY + (buttonHeight - 16) / 2);
+    tft.print(String(WPM));
+
+    tft.fillRect(minusButtonX, minusButtonY, buttonWidth, buttonHeight, ILI9341_RED);
+    tft.drawRect(minusButtonX, minusButtonY, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(minusButtonX + (buttonWidth - 8) / 2, minusButtonY + (buttonHeight - 16) / 2 + 2);
+    tft.print("-");
+
+    tft.fillRect(plusButtonX, plusButtonY, buttonWidth, buttonHeight, ILI9341_GREEN);
+    tft.drawRect(plusButtonX, plusButtonY, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setCursor(plusButtonX + (buttonWidth - 8) / 2, plusButtonY + (buttonHeight - 16) / 2 + 2);
+    tft.print("+");
+
+    int uiY2 = uiY + buttonHeight + 10;
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(10, uiY2 + (buttonHeight - 16) / 2);
+    tft.print("Buzzer Freq");
+
+    int minusButtonX2 = exitButtonX;
+    int minusButtonY2 = uiY2;
+    int currentBoxX2 = minusButtonX2 - valueSpacing - currentBoxWidth;
+    int currentBoxY2 = uiY2;
+    int plusButtonX2 = minusButtonX2 + buttonWidth + buttonSpacing;
+    int plusButtonY2 = uiY2;
+
+    tft.drawRect(currentBoxX2, currentBoxY2, currentBoxWidth, currentBoxHeight, ILI9341_WHITE);
+    tft.fillRect(currentBoxX2, currentBoxY2, currentBoxWidth, currentBoxHeight, ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setCursor(currentBoxX2, currentBoxY2 + (buttonHeight - 16) / 2);
+    tft.print(String(buzzerFrequency));
+
+    tft.fillRect(minusButtonX2, minusButtonY2, buttonWidth, buttonHeight, ILI9341_RED);
+    tft.drawRect(minusButtonX2, minusButtonY2, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(minusButtonX2 + (buttonWidth - 8) / 2, minusButtonY2 + (buttonHeight - 16) / 2 + 2);
+    tft.print("-");
+
+    tft.fillRect(plusButtonX2, plusButtonY2, buttonWidth, buttonHeight, ILI9341_GREEN);
+    tft.drawRect(plusButtonX2, plusButtonY2, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setCursor(plusButtonX2 + (buttonWidth - 8) / 2, plusButtonY2 + (buttonHeight - 16) / 2 + 2);
+    tft.print("+");
+
+    int uiY3 = uiY2 + buttonHeight + 10;
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(10, uiY3 + (buttonHeight - 16) / 2);
+    tft.print("Dash Hold Time");
+
+    int minusButtonX3 = exitButtonX;
+    int minusButtonY3 = uiY3;
+    int currentBoxX3 = minusButtonX3 - valueSpacing - currentBoxWidth;
+    int currentBoxY3 = uiY3;
+    int plusButtonX3 = minusButtonX3 + buttonWidth + buttonSpacing;
+    int plusButtonY3 = uiY3;
+
+    tft.drawRect(currentBoxX3, currentBoxY3, currentBoxWidth, currentBoxHeight, ILI9341_WHITE);
+    tft.fillRect(currentBoxX3, currentBoxY3, currentBoxWidth, currentBoxHeight, ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setCursor(currentBoxX3, currentBoxY3 + (buttonHeight - 16) / 2);
+    tft.print(String(buttonPressTimingThreshold));
+
+    tft.fillRect(minusButtonX3, minusButtonY3, buttonWidth, buttonHeight, ILI9341_RED);
+    tft.drawRect(minusButtonX3, minusButtonY3, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(minusButtonX3 + (buttonWidth - 8) / 2, minusButtonY3 + (buttonHeight - 16) / 2 + 2);
+    tft.print("-");
+
+    tft.fillRect(plusButtonX3, plusButtonY3, buttonWidth, buttonHeight, ILI9341_GREEN);
+    tft.drawRect(plusButtonX3, plusButtonY3, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setCursor(plusButtonX3 + (buttonWidth - 8) / 2, plusButtonY3 + (buttonHeight - 16) / 2 + 2);
+    tft.print("+");
+
+    int uiY4 = uiY3 + buttonHeight + 10;
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(10, uiY4 + (buttonHeight - 16) / 2);
+    tft.print("Next Letter In");
+
+    int minusButtonX4 = exitButtonX;
+    int minusButtonY4 = uiY4;
+    int currentBoxX4 = minusButtonX4 - valueSpacing - currentBoxWidth;
+    int currentBoxY4 = uiY4;
+    int plusButtonX4 = minusButtonX4 + buttonWidth + buttonSpacing;
+    int plusButtonY4 = uiY4;
+
+    tft.drawRect(currentBoxX4, currentBoxY4, currentBoxWidth, currentBoxHeight, ILI9341_WHITE);
+    tft.fillRect(currentBoxX4, currentBoxY4, currentBoxWidth, currentBoxHeight, ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setCursor(currentBoxX4, currentBoxY4 + (buttonHeight - 16) / 2);
+    tft.print(String(letterTerminationDelay));
+
+    tft.fillRect(minusButtonX4, minusButtonY4, buttonWidth, buttonHeight, ILI9341_RED);
+    tft.drawRect(minusButtonX4, minusButtonY4, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(minusButtonX4 + (buttonWidth - 8) / 2, minusButtonY4 + (buttonHeight - 16) / 2 + 2);
+    tft.print("-");
+
+    tft.fillRect(plusButtonX4, plusButtonY4, buttonWidth, buttonHeight, ILI9341_GREEN);
+    tft.drawRect(plusButtonX4, plusButtonY4, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setCursor(plusButtonX4 + (buttonWidth - 8) / 2, plusButtonY4 + (buttonHeight - 16) / 2 + 2);
+    tft.print("+");
+
+    int uiY5 = uiY4 + buttonHeight + 10;
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(10, uiY5 + (buttonHeight - 16) / 2);
+    tft.print("Random Word Min");
+
+    int minusButtonX5 = exitButtonX;
+    int minusButtonY5 = uiY5;
+    int currentBoxX5 = minusButtonX5 - valueSpacing - currentBoxWidth;
+    int currentBoxY5 = uiY5;
+    int plusButtonX5 = minusButtonX5 + buttonWidth + buttonSpacing;
+    int plusButtonY5 = uiY5;
+
+    tft.drawRect(currentBoxX5, currentBoxY5, currentBoxWidth, currentBoxHeight, ILI9341_WHITE);
+    tft.fillRect(currentBoxX5, currentBoxY5, currentBoxWidth, currentBoxHeight, ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setCursor(currentBoxX5, currentBoxY5 + (buttonHeight - 16) / 2);
+    tft.print(String(randomWordMinLength));
+
+    tft.fillRect(minusButtonX5, minusButtonY5, buttonWidth, buttonHeight, ILI9341_RED);
+    tft.drawRect(minusButtonX5, minusButtonY5, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(minusButtonX5 + (buttonWidth - 8) / 2, minusButtonY5 + (buttonHeight - 16) / 2 + 2);
+    tft.print("-");
+
+    tft.fillRect(plusButtonX5, plusButtonY5, buttonWidth, buttonHeight, ILI9341_GREEN);
+    tft.drawRect(plusButtonX5, plusButtonY5, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setCursor(plusButtonX5 + (buttonWidth - 8) / 2, plusButtonY5 + (buttonHeight - 16) / 2 + 2);
+    tft.print("+");
+
+    int uiY6 = uiY5 + buttonHeight + 10;
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(10, uiY6 + (buttonHeight - 16) / 2);
+    tft.print("Random Word Max");
+
+    int minusButtonX6 = exitButtonX;
+    int minusButtonY6 = uiY6;
+    int currentBoxX6 = minusButtonX6 - valueSpacing - currentBoxWidth;
+    int currentBoxY6 = uiY6;
+    int plusButtonX6 = minusButtonX6 + buttonWidth + buttonSpacing;
+    int plusButtonY6 = uiY6;
+
+    tft.drawRect(currentBoxX6, currentBoxY6, currentBoxWidth, currentBoxHeight, ILI9341_WHITE);
+    tft.fillRect(currentBoxX6, currentBoxY6, currentBoxWidth, currentBoxHeight, ILI9341_BLACK);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_YELLOW);
+    tft.setCursor(currentBoxX6, currentBoxY6 + (buttonHeight - 16) / 2);
+    tft.print(String(randomWordMaxLength));
+
+    tft.fillRect(minusButtonX6, minusButtonY6, buttonWidth, buttonHeight, ILI9341_RED);
+    tft.drawRect(minusButtonX6, minusButtonY6, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(minusButtonX6 + (buttonWidth - 8) / 2, minusButtonY6 + (buttonHeight - 16) / 2 + 2);
+    tft.print("-");
+
+    tft.fillRect(plusButtonX6, plusButtonY6, buttonWidth, buttonHeight, ILI9341_GREEN);
+    tft.drawRect(plusButtonX6, plusButtonY6, buttonWidth, buttonHeight, ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.setCursor(plusButtonX6 + (buttonWidth - 8) / 2, plusButtonY6 + (buttonHeight - 16) / 2 + 2);
+    tft.print("+");
+
     screenDrawn = true;
   }
 
   TSPoint p = ts.getPoint();
   if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
-    screenDrawn = false;
-    currentState = STATE_MAIN_MENU;
+    int calX = (p.y * xCalM) + xCalC;
+    int calY = (p.x * yCalM) + yCalC;
+
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+
+    if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+      screenDrawn = false;
+      currentState = STATE_MAIN_MENU;
+      return;
+    }
+
+    int uiY = 50;
+    int buttonSpacing = 8;
+    int valueSpacing = 1;
+    int buttonWidth = 25;
+    int buttonHeight = 23;
+    int currentBoxWidth = 50;
+    int minusButtonX = tft.width() - 60;
+    int minusButtonY = uiY;
+    int currentBoxX = minusButtonX - valueSpacing - currentBoxWidth;
+    int plusButtonX = minusButtonX + buttonWidth + buttonSpacing;
+    int plusButtonY = uiY;
+
+    bool updatedWPM = false;
+    if (calX > minusButtonX && calX < minusButtonX + buttonWidth && calY > minusButtonY && calY < minusButtonY + buttonHeight) {
+      if (WPM > 5) {
+        WPM--;
+        updatedWPM = true;
+      }
+    } else if (calX > plusButtonX && calX < plusButtonX + buttonWidth && calY > plusButtonY && calY < plusButtonY + buttonHeight) {
+      if (WPM < 30) {
+        WPM++;
+        updatedWPM = true;
+      }
+    }
+    if (updatedWPM) {
+      tft.fillRect(currentBoxX, uiY, currentBoxWidth, buttonHeight, ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.setTextColor(ILI9341_YELLOW);
+      tft.setCursor(currentBoxX, uiY + (buttonHeight - 16) / 2);
+      tft.print(String(WPM));
+      delay(120);
+    }
+
+    int uiY2 = uiY + buttonHeight + 10;
+    int buttonSpacing2 = 8;
+    int valueSpacing2 = 1;
+    int minusButtonX2 = tft.width() - 60;
+    int minusButtonY2 = uiY2;
+    int currentBoxX2 = minusButtonX2 - valueSpacing2 - currentBoxWidth;
+    int plusButtonX2 = minusButtonX2 + buttonWidth + buttonSpacing2;
+    int plusButtonY2 = uiY2;
+
+    bool updatedFreq = false;
+    if (calX > minusButtonX2 && calX < minusButtonX2 + buttonWidth && calY > minusButtonY2 && calY < minusButtonY2 + buttonHeight) {
+      if (buzzerFrequency > 200) {
+        buzzerFrequency -= 50;
+        updatedFreq = true;
+      }
+    } else if (calX > plusButtonX2 && calX < plusButtonX2 + buttonWidth && calY > plusButtonY2 && calY < plusButtonY2 + buttonHeight) {
+      if (buzzerFrequency < 9950) {
+        buzzerFrequency += 50;
+        updatedFreq = true;
+      }
+    }
+    if (updatedFreq) {
+      tft.fillRect(currentBoxX2, uiY2, currentBoxWidth, buttonHeight, ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.setTextColor(ILI9341_YELLOW);
+      tft.setCursor(currentBoxX2, uiY2 + (buttonHeight - 16) / 2);
+      tft.print(String(buzzerFrequency));
+      tone(BUZZER_PIN, buzzerFrequency, 100);
+      delay(120);
+    }
+
+    int uiY3 = uiY2 + buttonHeight + 10;
+    int buttonSpacing3 = 8;
+    int valueSpacing3 = 1;
+    int minusButtonX3 = tft.width() - 60;
+    int minusButtonY3 = uiY3;
+    int currentBoxX3 = minusButtonX3 - valueSpacing3 - currentBoxWidth;
+    int plusButtonX3 = minusButtonX3 + buttonWidth + buttonSpacing3;
+    int plusButtonY3 = uiY3;
+
+    bool updatedThresh = false;
+    if (calX > minusButtonX3 && calX < minusButtonX3 + buttonWidth && calY > minusButtonY3 && calY < minusButtonY3 + buttonHeight) {
+      if (buttonPressTimingThreshold > 200) {
+        buttonPressTimingThreshold -= 50;
+        updatedThresh = true;
+      }
+    } else if (calX > plusButtonX3 && calX < plusButtonX3 + buttonWidth && calY > plusButtonY3 && calY < plusButtonY3 + buttonHeight) {
+      if (buttonPressTimingThreshold < 1000) {
+        buttonPressTimingThreshold += 50;
+        updatedThresh = true;
+      }
+    }
+    if (updatedThresh) {
+      tft.fillRect(currentBoxX3, uiY3, currentBoxWidth, buttonHeight, ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.setTextColor(ILI9341_YELLOW);
+      tft.setCursor(currentBoxX3, uiY3 + (buttonHeight - 16) / 2);
+      tft.print(String(buttonPressTimingThreshold));
+      delay(120);
+    }
+
+    int uiY4 = uiY3 + buttonHeight + 10;
+    int buttonSpacing4 = 8;
+    int valueSpacing4 = 1;
+    int minusButtonX4 = tft.width() - 60;
+    int minusButtonY4 = uiY4;
+    int currentBoxX4 = minusButtonX4 - valueSpacing4 - currentBoxWidth;
+    int plusButtonX4 = minusButtonX4 + buttonWidth + buttonSpacing4;
+    int plusButtonY4 = uiY4;
+
+    bool updatedDelay = false;
+    if (calX > minusButtonX4 && calX < minusButtonX4 + buttonWidth && calY > minusButtonY4 && calY < minusButtonY4 + buttonHeight) {
+      if (letterTerminationDelay > 300) {
+        letterTerminationDelay -= 50;
+        updatedDelay = true;
+      }
+    } else if (calX > plusButtonX4 && calX < plusButtonX4 + buttonWidth && calY > plusButtonY4 && calY < plusButtonY4 + buttonHeight) {
+      if (letterTerminationDelay < 9950) {
+        letterTerminationDelay += 50;
+        updatedDelay = true;
+      }
+    }
+    if (updatedDelay) {
+      tft.fillRect(currentBoxX4, uiY4, currentBoxWidth, buttonHeight, ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.setTextColor(ILI9341_YELLOW);
+      tft.setCursor(currentBoxX4, uiY4 + (buttonHeight - 16) / 2);
+      tft.print(String(letterTerminationDelay));
+      delay(120);
+    }
+
+    int uiY5 = uiY4 + buttonHeight + 10;
+    int minusButtonX5 = tft.width() - 60;
+    int minusButtonY5 = uiY5;
+    int currentBoxX5 = minusButtonX5 - valueSpacing - currentBoxWidth;
+    int plusButtonX5 = minusButtonX5 + buttonWidth + buttonSpacing;
+    int plusButtonY5 = uiY5;
+
+    bool updatedMin = false;
+    if (calX > minusButtonX5 && calX < minusButtonX5 + buttonWidth && calY > minusButtonY5 && calY < minusButtonY5 + buttonHeight) {
+      if (randomWordMinLength > 1) {
+        randomWordMinLength--;
+        updatedMin = true;
+      }
+    } else if (calX > plusButtonX5 && calX < plusButtonX5 + buttonWidth && calY > plusButtonY5 && calY < plusButtonY5 + buttonHeight) {
+      if (randomWordMinLength < 10 && randomWordMinLength + 1 <= randomWordMaxLength) {
+        randomWordMinLength++;
+        updatedMin = true;
+      }
+    }
+    if (updatedMin) {
+      tft.fillRect(currentBoxX5, uiY5, currentBoxWidth, buttonHeight, ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.setTextColor(ILI9341_YELLOW);
+      tft.setCursor(currentBoxX5, uiY5 + (buttonHeight - 16) / 2);
+      tft.print(String(randomWordMinLength));
+      delay(120);
+    }
+
+    int uiY6 = uiY5 + buttonHeight + 10;
+    int minusButtonX6 = tft.width() - 60;
+    int minusButtonY6 = uiY6;
+    int currentBoxX6 = minusButtonX6 - valueSpacing - currentBoxWidth;
+    int plusButtonX6 = minusButtonX6 + buttonWidth + buttonSpacing;
+    int plusButtonY6 = uiY6;
+
+    bool updatedMax = false;
+    if (calX > minusButtonX6 && calX < minusButtonX6 + buttonWidth && calY > minusButtonY6 && calY < minusButtonY6 + buttonHeight) {
+      if (randomWordMaxLength > 1 && randomWordMaxLength - 1 >= randomWordMinLength) {
+        randomWordMaxLength--;
+        updatedMax = true;
+      }
+    } else if (calX > plusButtonX6 && calX < plusButtonX6 + buttonWidth && calY > plusButtonY6 && calY < plusButtonY6 + buttonHeight) {
+      if (randomWordMaxLength < 10) {
+        randomWordMaxLength++;
+        updatedMax = true;
+      }
+    }
+    if (updatedMax) {
+      tft.fillRect(currentBoxX6, uiY6, currentBoxWidth, buttonHeight, ILI9341_BLACK);
+      tft.setTextSize(2);
+      tft.setTextColor(ILI9341_YELLOW);
+      tft.setCursor(currentBoxX6, uiY6 + (buttonHeight - 16) / 2);
+      tft.print(String(randomWordMaxLength));
+      delay(120);
+    }
+  }
+}
+
+void runOtherScreen() {
+  if (!screenDrawn) {
+    resetState();
+    tft.fillScreen(ILI9341_BLACK);
+
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setCursor(10, 10);
+    tft.print("Other");
+
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+
+    tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
+    int16_t exitTextX = exitButtonX + (exitButtonWidth - 48) / 2;
+    int16_t exitTextY = exitButtonY + (exitButtonHeight - 16) / 2 + 2;
+    tft.setCursor(exitTextX, exitTextY);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("EXIT");
+    tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+
+    screenDrawn = true;
+  }
+
+  TSPoint p = ts.getPoint();
+  if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+    int calX = (p.y * xCalM) + xCalC;
+    int calY = (p.x * yCalM) + yCalC;
+
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+    if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
+      screenDrawn = false;
+      currentState = STATE_MAIN_MENU;
+      return;
+    }
   }
 }
