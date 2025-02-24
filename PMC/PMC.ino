@@ -1086,8 +1086,12 @@ void runMainMenuScreen() {
     int16_t countX = mailButtonX + mailButtonWidth - 9;
     int16_t countY = mailButtonY;
     tft.setCursor(countX, countY);
-    tft.print(currentMessageCount);
 
+    if (currentMessageCount > 9) {
+      tft.print("9+");
+    } else {
+      tft.print(currentMessageCount);
+    }
     previousMessageCount = currentMessageCount;
   }
 
