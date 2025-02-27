@@ -1158,6 +1158,9 @@ void runMainMenuScreen() {
 }
 
 void drawWiFiSymbol(int centerX, int centerY, bool wifiConnected, bool cloudConnected) {
+
+  tft.fillRect(centerX - 30, centerY - 30, 60, 60, ILI9341_BLACK);
+
   uint16_t centerDotColor = wifiConnected ? tft.color565(0, 255, 0) : ILI9341_GRAY;
   uint16_t arcColor = wifiConnected ? tft.color565(0, 255, 0) : ILI9341_GRAY;
 
@@ -2546,18 +2549,18 @@ void runDecodeScreen() {
 
 void runGameScreen() {
 
-  static const char* fallbackWordsByLength[11][5] = {
-    { "", "", "", "", "" },
-    { "A", "I", "O", "U", "Y" },                                              // 1-letter words
-    { "of", "to", "it", "by", "in" },                                         // 2-letter words
-    { "cat", "dog", "run", "sky", "car" },                                    // 3-letter words
-    { "code", "love", "hate", "cool", "fast" },                               // 4-letter words
-    { "hello", "world", "quick", "brown", "smart" },                          // 5-letter words
-    { "morse", "system", "device", "puzzle", "secret" },                      // 6-letter words
-    { "network", "program", "display", "example", "control" },                // 7-letter words
-    { "computer", "keyboard", "function", "variable", "solution" },           // 8-letter words
-    { "generator", "mechanism", "framework", "procedure", "interface" },      // 9-letter words
-    { "microphone", "innovation", "technology", "perfection", "expression" }  // 10-letter words
+  static const char* fallbackWordsByLength[11][10] = {
+    { "", "", "", "", "", "", "", "", "", "" },
+    { "A", "I", "O", "U", "Y", "E", "R", "S", "T", "N" },                                                                                           // 1-letter words
+    { "OF", "TO", "IT", "BY", "IN", "UP", "NO", "DO", "GO", "ME" },                                                                                 // 2-letter words
+    { "CAT", "DOG", "RUN", "SKY", "CAR", "BAT", "FOX", "PEN", "RAT", "SUN" },                                                                       // 3-letter words
+    { "CODE", "LOVE", "HATE", "COOL", "FAST", "FIRE", "WIND", "TIME", "LIFE", "WAVE" },                                                             // 4-letter words
+    { "HELLO", "WORLD", "QUICK", "BROWN", "SMART", "FLASH", "LIGHT", "BRAVE", "GRACE", "PEACE" },                                                   // 5-letter words
+    { "MORSE", "SYSTEM", "DEVICE", "PUZZLE", "SECRET", "CIPHER", "SIGNAL", "LETTER", "NUMBER", "NOTICE" },                                          // 6-letter words
+    { "NETWORK", "PROGRAM", "DISPLAY", "EXAMPLE", "CONTROL", "BALANCE", "PROCESS", "CAPTURE", "CONNECT", "ANALYZE" },                               // 7-letter words
+    { "COMPUTER", "KEYBOARD", "FUNCTION", "VARIABLE", "SOLUTION", "SOFTWARE", "HARDWARE", "SECURITY", "DATABASE", "INTERNET" },                     // 8-letter words
+    { "GENERATOR", "MECHANISM", "FRAMEWORK", "PROCEDURE", "INTERFACE", "TECHNICAL", "EQUATIONS", "KNOWLEDGE", "INNOVATOR", "DISCOVERY" },           // 9-letter words
+    { "MICROPHONE", "INNOVATION", "TECHNOLOGY", "PERFECTION", "EXPRESSION", "TRANSITION", "CREATIVITY", "DEFINITION", "IMPRESSION", "EXCELLENCE" }  // 10-letter words
   };
 
   static String displayWord = "";
@@ -2664,6 +2667,7 @@ void runGameScreen() {
               displayWord = json.substring(0, endQuote);
             }
           }
+          displayWord.toUpperCase();
         }
         client.stop();
       }
