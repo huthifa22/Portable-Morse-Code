@@ -8,6 +8,7 @@
 #include <vector>
 #include <Fonts/FreeSansBoldOblique18pt7b.h>
 #include <Fonts/FreeSans9pt7b.h>
+#include <ArduinoJson.h>
 
 // TFT Display SPI Pins
 #define TFT_CLK 13
@@ -94,6 +95,19 @@ bool screenDrawn = false;
 AppState currentState = STATE_STARTUP;
 KeyboardState currentKeyboardState = STATE_UPPERCASE;
 
+unsigned long g_uptime = 0;
+unsigned long lastMillisUpdate = 0;
+const int UPTIME_AREA_WIDTH = 300;
+
+void updateGlobalUptime() {
+  unsigned long currentMillis = millis();
+  if (lastMillisUpdate == 0) {
+    lastMillisUpdate = currentMillis;
+  }
+  g_uptime += (currentMillis - lastMillisUpdate);
+  lastMillisUpdate = currentMillis;
+}
+
 void setup() {
   Serial.begin(9600);
   tft.begin();
@@ -104,6 +118,7 @@ void setup() {
 }
 
 void loop() {
+  updateGlobalUptime();
   switch (currentState) {
     case STATE_STARTUP:
       runStartupScreen();
@@ -1159,7 +1174,7 @@ void runMainMenuScreen() {
 
 void drawWiFiSymbol(int centerX, int centerY, bool wifiConnected, bool cloudConnected) {
 
-  tft.fillRect(centerX - 30, centerY - 30, 60, 60, ILI9341_BLACK);
+  tft.fillRect(centerX - 23, centerY - 30, 60, 60, ILI9341_BLACK);
 
   uint16_t centerDotColor = wifiConnected ? tft.color565(0, 255, 0) : ILI9341_GRAY;
   uint16_t arcColor = wifiConnected ? tft.color565(0, 255, 0) : ILI9341_GRAY;
@@ -1579,6 +1594,7 @@ void runMailScreen() {
 }
 
 void noMailPopup() {
+
   int popupWidth = tft.width() - 140;
   int popupHeight = 80;
   int popupX = (tft.width() - popupWidth) / 2;
@@ -1601,8 +1617,62 @@ void noMailPopup() {
 
   tft.fillRect(okButtonX, okButtonY, okButtonWidth, okButtonHeight, ILI9341_RED);
   tft.drawRect(okButtonX, okButtonY, okButtonWidth, okButtonHeight, ILI9341_WHITE);
+
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds("OK", 0, 0, &x1, &y1, &w, &h);
+  int okTextX = okButtonX + (okButtonWidth - w) / 2;
+  int okTextY = okButtonY + (okButtonHeight - h) / 2 - y1;
+  tft.setCursor(okTextX, okTextY);
+  tft.print("OK");
+
+  while (true) {
+    TSPoint p = ts.getPoint();
+    if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
+      int calX = (p.y * xCalM) + xCalC;
+      int calY = (p.x * yCalM) + yCalC;
+
+      if (calX > okButtonX && calX < okButtonX + okButtonWidth && calY > okButtonY && calY < okButtonY + okButtonHeight) {
+        delay(200);
+        screenDrawn = false;
+        currentState = STATE_MAIN_MENU;
+        return;
+      }
+    }
+  }
+}
+
+void noWiFiPopup() {
+
+  int popupWidth = tft.width() - 140;
+  int popupHeight = 80;
+  int popupX = (tft.width() - popupWidth) / 2;
+  int popupY = (tft.height() - popupHeight) / 2;
+
+  int okButtonWidth = 60;
+  int okButtonHeight = 30;
+  int okButtonX = popupX + (popupWidth - okButtonWidth) / 2;
+  int okButtonY = popupY + popupHeight - okButtonHeight - 10;
+
+  tft.fillRect(popupX, popupY, popupWidth, popupHeight, ILI9341_BLACK);
+  tft.drawRect(popupX, popupY, popupWidth, popupHeight, ILI9341_WHITE);
+
+  tft.setTextSize(2);
   tft.setTextColor(ILI9341_WHITE);
-  tft.setCursor(okButtonX + 12, okButtonY + 8);
+  int textX = popupX + (popupWidth - (26 * 6)) / 2;
+  int textY = popupY + 15;
+  tft.setCursor(textX, textY);
+  tft.print("Connect WiFi!");
+
+  tft.fillRect(okButtonX, okButtonY, okButtonWidth, okButtonHeight, ILI9341_RED);
+  tft.drawRect(okButtonX, okButtonY, okButtonWidth, okButtonHeight, ILI9341_WHITE);
+
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft.getTextBounds("OK", 0, 0, &x1, &y1, &w, &h);
+  int okTextX = okButtonX + (okButtonWidth - w) / 2;
+  int okTextY = okButtonY + (okButtonHeight - h) / 2 - y1;
+  tft.setCursor(okTextX, okTextY);
   tft.print("OK");
 
   while (true) {
@@ -3351,42 +3421,476 @@ void runToolsScreen() {
   }
 }
 
+void updateTimeDisplay(int startX, bool forceRedraw = false) {
+
+  static bool timeInitialized = false;
+  static long baseTimeSeconds = 0;
+  static unsigned long baseMillis = 0;
+  static String prevTimeStr = "";
+  static unsigned long lastUpdate = 0;
+
+  if (!timeInitialized) {
+    WiFiClient client;
+    const char* host = "worldtimeapi.org";
+
+    if (client.connect(host, 80)) {
+      client.println("GET /api/ip HTTP/1.1");
+      client.print("Host: ");
+      client.println(host);
+      client.println("Connection: close");
+      client.println();
+
+      unsigned long timeout = millis();
+      String response = "";
+
+      while (!client.available() && millis() - timeout < 3000) {
+        delay(10);
+      }
+      while (client.available()) {
+        response += char(client.read());
+      }
+
+      int jsonStart = response.indexOf("{");
+      if (jsonStart != -1) {
+        String json = response.substring(jsonStart);
+        StaticJsonDocument<1024> doc;
+        DeserializationError error = deserializeJson(doc, json);
+
+        if (!error && doc.containsKey("unixtime") && doc.containsKey("utc_offset")) {
+          long unixtime = doc["unixtime"];
+          String offsetStr = doc["utc_offset"];
+          int offsetHour = offsetStr.substring(1, 3).toInt();
+          int offsetMinute = offsetStr.substring(4, 6).toInt();
+          int offsetSeconds = offsetHour * 3600 + offsetMinute * 60;
+          if (offsetStr.charAt(0) == '-') {
+            offsetSeconds = -offsetSeconds;
+          }
+          baseTimeSeconds = unixtime + offsetSeconds;
+          baseMillis = millis();
+          timeInitialized = true;
+        }
+      }
+      client.stop();
+    }
+  }
+
+  if (millis() - lastUpdate > 1000 && timeInitialized) {
+    lastUpdate = millis();
+
+    unsigned long elapsedSeconds = (millis() - baseMillis) / 1000;
+    unsigned long currentSeconds = (baseTimeSeconds + elapsedSeconds) % 86400;
+
+    int currHour = currentSeconds / 3600;
+    int currMinute = (currentSeconds % 3600) / 60;
+    int currSecond = currentSeconds % 60;
+
+    String ampm = "AM";
+    int displayHour = currHour;
+    if (currHour >= 12) {
+      ampm = "PM";
+      if (currHour > 12) {
+        displayHour = currHour - 12;
+      }
+    }
+    if (displayHour == 0) {
+      displayHour = 12;
+    }
+
+    char timeBuffer[12];
+    sprintf(timeBuffer, "%02d:%02d:%02d %s", displayHour, currMinute, currSecond, ampm.c_str());
+    String newTimeStr = String(timeBuffer);
+
+    int startY = 10;
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_WHITE);
+
+    if (forceRedraw || prevTimeStr.length() != newTimeStr.length() || prevTimeStr == "") {
+      tft.fillRect(startX, startY, newTimeStr.length() * 12, 16, ILI9341_BLACK);
+      tft.setCursor(startX, startY);
+      tft.print(newTimeStr);
+    } else {
+      for (int i = 0; i < newTimeStr.length(); i++) {
+        if (newTimeStr.charAt(i) != prevTimeStr.charAt(i)) {
+          int charX = startX + i * 12;
+          tft.fillRect(charX, startY, 12, 16, ILI9341_BLACK);
+          tft.setCursor(charX, startY);
+          tft.print(newTimeStr.charAt(i));
+        }
+      }
+    }
+    prevTimeStr = newTimeStr;
+  }
+}
+
+void updateLocalDateDisplay(int startX, bool forceRedraw = false) {
+  static String localDate = "";
+  static String prevDateStr = "";
+  static unsigned long lastDateUpdate = 0;
+
+  if (!localDate.length() || millis() - lastDateUpdate > 60000) {
+    WiFiClient client;
+    const char* host = "worldtimeapi.org";
+
+    if (client.connect(host, 80)) {
+      client.println("GET /api/ip HTTP/1.1");
+      client.print("Host: ");
+      client.println(host);
+      client.println("Connection: close");
+      client.println();
+
+      unsigned long timeout = millis();
+      String response = "";
+
+      while (!client.available() && millis() - timeout < 3000) { delay(10); }
+      while (client.available()) { response += char(client.read()); }
+
+      int jsonStart = response.indexOf("{");
+
+      if (jsonStart != -1) {
+        String json = response.substring(jsonStart);
+        StaticJsonDocument<1024> doc;
+        DeserializationError error = deserializeJson(doc, json);
+
+        if (!error && doc.containsKey("datetime")) {
+          String datetime = doc["datetime"];
+          String year = datetime.substring(0, 4);
+          String month = datetime.substring(5, 7);
+          String day = datetime.substring(8, 10);
+          String newDate = month + "/" + day + "/" + year;
+
+          if (newDate != localDate) {
+            localDate = newDate;
+          }
+
+          lastDateUpdate = millis();
+        }
+      }
+      client.stop();
+    }
+  }
+
+  int startY = 60;
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+
+  if (forceRedraw || prevDateStr != localDate) {
+    tft.fillRect(startX, startY, 10 * 12, 16, ILI9341_BLACK);
+    tft.setCursor(startX, startY);
+    tft.print(localDate);
+  }
+  prevDateStr = localDate;
+}
+
+String getWeatherDescription(int code) {
+  if (code == 0) return "Clear";
+  else if (code >= 1 && code <= 3) return "Partly Cloudy";
+  else if (code == 45 || code == 48) return "Foggy";
+  else if (code >= 51 && code <= 57) return "Drizzle";
+  else if (code >= 61 && code <= 67) return "Rain";
+  else if (code >= 71 && code <= 77) return "Snow";
+  else if (code >= 80 && code <= 82) return "Rain Showers";
+  else if (code >= 85 && code <= 86) return "Snow Showers";
+  else if (code == 95) return "Thunderstorm";
+  else if (code == 96 || code == 99) return "Thunderstorm w/ Hail";
+  else return "Unknown";
+}
+
+void updateWeatherDisplay(int startX, bool forceRedraw = false) {
+  static bool weatherInitialized = false;
+  static float temperature = 0;
+  static int weatherCode = 0;
+  static unsigned long lastWeatherUpdate = 0;
+  static String prevWeatherStr = "";
+
+  if (millis() - lastWeatherUpdate > 300000 || !weatherInitialized) {
+    WiFiClient client;
+    float lat = 0, lon = 0;
+
+    if (client.connect("ip-api.com", 80)) {
+      client.println("GET /json HTTP/1.1");
+      client.println("Host: ip-api.com");
+      client.println("Connection: close");
+      client.println();
+
+      unsigned long timeout = millis();
+      String locationResponse = "";
+      while (!client.available() && millis() - timeout < 3000) { delay(10); }
+      while (client.available()) { locationResponse += char(client.read()); }
+
+      int jsonStart = locationResponse.indexOf("{");
+
+      if (jsonStart != -1) {
+        String json = locationResponse.substring(jsonStart);
+        StaticJsonDocument<512> doc;
+        DeserializationError err = deserializeJson(doc, json);
+
+        if (!err) {
+          lat = doc["lat"];
+          lon = doc["lon"];
+        }
+      }
+      client.stop();
+    }
+
+    if (client.connect("api.open-meteo.com", 80)) {
+      String url = "/v1/forecast?latitude=" + String(lat, 6) + "&longitude=" + String(lon, 6) + "&current_weather=true&temperature_unit=fahrenheit";
+      client.print("GET " + url + " HTTP/1.1\r\n");
+      client.print("Host: api.open-meteo.com\r\n");
+      client.println("Connection: close\r\n");
+
+      unsigned long timeout = millis();
+      String weatherResponse = "";
+
+      while (!client.available() && millis() - timeout < 3000) { delay(10); }
+      while (client.available()) { weatherResponse += char(client.read()); }
+
+      int jsonStart = weatherResponse.indexOf("{");
+
+      if (jsonStart != -1) {
+        String json = weatherResponse.substring(jsonStart);
+        StaticJsonDocument<1024> doc;
+        DeserializationError err = deserializeJson(doc, json);
+
+        if (!err && doc.containsKey("current_weather")) {
+          temperature = doc["current_weather"]["temperature"];
+          weatherCode = doc["current_weather"]["weathercode"];
+        }
+      }
+      client.stop();
+    }
+    lastWeatherUpdate = millis();
+    weatherInitialized = true;
+  }
+
+  String description = getWeatherDescription(weatherCode);
+  char weatherBuffer[50];
+  sprintf(weatherBuffer, "%s, %.0f F", description.c_str(), temperature);
+  String newWeatherStr = String(weatherBuffer);
+
+  int startY = 90;
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+
+  if (forceRedraw || prevWeatherStr.length() != newWeatherStr.length() || prevWeatherStr == "") {
+    tft.fillRect(startX, startY, newWeatherStr.length() * 12, 16, ILI9341_BLACK);
+    tft.setCursor(startX, startY);
+    tft.print(newWeatherStr);
+  } else {
+    for (int i = 0; i < newWeatherStr.length(); i++) {
+      if (newWeatherStr.charAt(i) != prevWeatherStr.charAt(i)) {
+        int charX = startX + i * 12;
+        tft.fillRect(charX, startY, 12, 16, ILI9341_BLACK);
+        tft.setCursor(charX, startY);
+        tft.print(newWeatherStr.charAt(i));
+      }
+    }
+  }
+  prevWeatherStr = newWeatherStr;
+}
+
+void updateLocationDisplay(int startX, int startY, bool forceRedraw = false) {
+  static String prevLocationStr = "";
+  static String locationStr = "";
+  static unsigned long lastLocationUpdate = 0;
+
+  if (millis() - lastLocationUpdate > 300000 || locationStr == "") {
+    WiFiClient client;
+    if (client.connect("ipwho.is", 80)) {
+      client.println("GET / HTTP/1.1");
+      client.println("Host: ipwho.is");
+      client.println("Connection: close");
+      client.println();
+
+      unsigned long timeout = millis();
+      String response;
+      while (!client.available() && millis() - timeout < 3000) { delay(10); }
+      while (client.available()) {
+        response += static_cast<char>(client.read());
+      }
+
+      int jsonStart = response.indexOf('{');
+      if (jsonStart != -1) {
+        String json = response.substring(jsonStart);
+        StaticJsonDocument<512> doc;
+        DeserializationError err = deserializeJson(doc, json);
+
+        if (!err && doc["success"] == true) {
+          String city = doc["city"];
+          String regionAbbr = doc["region_code"];
+          String country = doc["country"];
+
+          if (country == "United States") {
+            country = "USA";
+          }
+
+          locationStr = city + ", " + regionAbbr + ", " + country;
+          lastLocationUpdate = millis();
+        }
+      }
+      client.stop();
+    }
+  }
+
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+
+  if (forceRedraw || locationStr != prevLocationStr) {
+    tft.fillRect(startX, startY, 10 * 12, 16, ILI9341_BLACK);
+    tft.setCursor(startX, startY);
+    tft.print(locationStr);
+  }
+  prevLocationStr = locationStr;
+}
+
+void updateNetworkInfo(int startX, int startY, bool forceRedraw = false) {
+  static String prevIPStr = "";
+  static String prevSignalStr = "";
+
+  IPAddress ip = WiFi.localIP();
+  char ipBuffer[40];
+  sprintf(ipBuffer, "IP: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+  String newIPStr = String(ipBuffer);
+
+  int rssi = WiFi.RSSI();
+
+  String signalQuality;
+  if (rssi > -50) {
+    signalQuality = "Amazing";
+  } else if (rssi > -60) {
+    signalQuality = "Good";
+  } else if (rssi > -70) {
+    signalQuality = "Fair";
+  } else {
+    signalQuality = "Poor";
+  }
+
+  char signalBuffer[30];
+  sprintf(signalBuffer, "Signal: %d dBm (%s)", rssi, signalQuality.c_str());
+  String newSignalStr = String(signalBuffer);
+
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+
+  if (forceRedraw || newIPStr != prevIPStr) {
+    tft.fillRect(startX, startY, newIPStr.length() * 12, 16, ILI9341_BLACK);
+    tft.setCursor(startX, startY);
+    tft.print(newIPStr);
+    prevIPStr = newIPStr;
+  }
+
+  int signalY = startY + 30;
+  if (forceRedraw || prevSignalStr.length() != newSignalStr.length() || prevSignalStr == "") {
+    tft.fillRect(startX, signalY, newSignalStr.length() * 12, 16, ILI9341_BLACK);
+    tft.setCursor(startX, signalY);
+    tft.print(newSignalStr);
+  } else {
+    for (int i = 8; i < newSignalStr.length(); i++) {
+      if (newSignalStr.charAt(i) != prevSignalStr.charAt(i)) {
+        int charX = startX + i * 12;
+        tft.fillRect(charX, signalY, 12, 16, ILI9341_BLACK);
+        tft.setCursor(charX, signalY);
+        tft.print(newSignalStr.charAt(i));
+      }
+    }
+  }
+  prevSignalStr = newSignalStr;
+}
+
+void updateUptimeDisplay(int startX, int startY, bool forceRedraw = false) {
+  static String prevUptimeStr = "";
+
+  unsigned long ms = g_uptime;
+  unsigned long totalSeconds = ms / 1000;
+  unsigned long seconds = totalSeconds % 60;
+  unsigned long totalMinutes = totalSeconds / 60;
+  unsigned long minutes = totalMinutes % 60;
+  unsigned long hours = totalMinutes / 60;
+
+  String uptimeStr = "Uptime: " + String(hours) + " h, " + String(minutes) + " m, " + String(seconds) + " s";
+
+  tft.setTextSize(2);
+  tft.setTextColor(ILI9341_WHITE);
+
+  if (forceRedraw || uptimeStr.length() != prevUptimeStr.length() || prevUptimeStr == "") {
+    tft.fillRect(startX, startY, UPTIME_AREA_WIDTH, 16, ILI9341_BLACK);
+    tft.setCursor(startX, startY);
+    tft.print(uptimeStr);
+  } else {
+    for (int i = 0; i < uptimeStr.length(); i++) {
+      if (uptimeStr.charAt(i) != prevUptimeStr.charAt(i)) {
+        int charX = startX + i * 12;
+        tft.fillRect(charX, startY, 12, 16, ILI9341_BLACK);
+        tft.setCursor(charX, startY);
+        tft.print(uptimeStr.charAt(i));
+      }
+    }
+  }
+  prevUptimeStr = uptimeStr;
+}
+
 void runOtherScreen() {
+  if (WiFi.status() != WL_CONNECTED) {
+    noWiFiPopup();
+    return;
+  }
+
   if (!screenDrawn) {
     resetState();
     tft.fillScreen(ILI9341_BLACK);
-
     tft.setTextSize(2);
     tft.setTextColor(ILI9341_WHITE);
-    tft.setCursor(10, 10);
+
+    int otherX = 10;
+    int otherY = 10;
+    tft.setCursor(otherX, otherY);
     tft.print("Other");
 
-    int exitButtonX = tft.width() - 60;
-    int exitButtonY = 5;
-    int exitButtonWidth = 60;
-    int exitButtonHeight = 25;
+    int16_t dummyX = 0, dummyY = 0;
+    uint16_t otherWidth = 0, otherHeight = 0;
+    tft.getTextBounds("Other", otherX, otherY, &dummyX, &dummyY, &otherWidth, &otherHeight);
 
-    tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
-    int16_t exitTextX = exitButtonX + (exitButtonWidth - 48) / 2;
-    int16_t exitTextY = exitButtonY + (exitButtonHeight - 16) / 2 + 2;
-    tft.setCursor(exitTextX, exitTextY);
-    tft.setTextColor(ILI9341_WHITE);
-    tft.setTextSize(2);
+    int exitX = tft.width() - 60;
+    tft.fillRect(exitX, 5, 60, 25, ILI9341_RED);
+    tft.drawRect(exitX, 5, 60, 25, ILI9341_WHITE);
+    tft.setCursor(exitX + (60 - 48) / 2, 5 + ((25 - 16) / 2) + 2);
     tft.print("EXIT");
-    tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+
+    int timeCenter = ((otherX + otherWidth + exitX) / 2) - 45;
+
+    updateTimeDisplay(timeCenter, true);
+    updateLocalDateDisplay(10, true);
+    updateWeatherDisplay(10, true);
+    updateLocationDisplay(10, 120, true);
+    updateNetworkInfo(10, 150, true);
+    updateUptimeDisplay(10, 210, true);
 
     screenDrawn = true;
   }
+
+  int otherX = 10;
+  int16_t dummyX2 = 0, dummyY2 = 0;
+  uint16_t otherWidth2 = 0, otherHeight2 = 0;
+  tft.getTextBounds("Other", otherX, 10, &dummyX2, &dummyY2, &otherWidth2, &otherHeight2);
+
+  int exitX = tft.width() - 60;
+  int timeCenter = ((otherX + otherWidth2 + exitX) / 2) - 45;
+
+  updateTimeDisplay(timeCenter, false);
+  updateLocalDateDisplay(10, false);
+  updateWeatherDisplay(10, false);
+  updateLocationDisplay(10, 120, false);
+  updateNetworkInfo(10, 150, false);
+  updateUptimeDisplay(10, 210, false);
 
   TSPoint p = ts.getPoint();
   if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
     int calX = (p.y * xCalM) + xCalC;
     int calY = (p.x * yCalM) + yCalC;
-
     int exitButtonX = tft.width() - 60;
     int exitButtonY = 5;
     int exitButtonWidth = 60;
     int exitButtonHeight = 25;
+
     if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
       screenDrawn = false;
       currentState = STATE_MAIN_MENU;
