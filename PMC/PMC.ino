@@ -3744,7 +3744,8 @@ void updateLocationDisplay(int startX, int startY, bool forceRedraw = false) {
 
 void updateNetworkInfo(int startX, int startY, bool forceRedraw = false) {
   static String prevIPStr = "";
-  static String prevSignalStr = "";
+  static String prevSignalDigits = "";
+  static String prevSignalStatus = "";
 
   IPAddress ip = WiFi.localIP();
   char ipBuffer[40];
@@ -3752,7 +3753,6 @@ void updateNetworkInfo(int startX, int startY, bool forceRedraw = false) {
   String newIPStr = String(ipBuffer);
 
   int rssi = WiFi.RSSI();
-
   String signalQuality;
   if (rssi > -50) {
     signalQuality = "Amazing";
@@ -3764,9 +3764,10 @@ void updateNetworkInfo(int startX, int startY, bool forceRedraw = false) {
     signalQuality = "Poor";
   }
 
-  char signalBuffer[30];
-  sprintf(signalBuffer, "Signal: %d dBm (%s)", rssi, signalQuality.c_str());
-  String newSignalStr = String(signalBuffer);
+  char rssiBuffer[10];
+  sprintf(rssiBuffer, "%d", rssi);
+  String newSignalDigits = String(rssiBuffer);
+  String newSignalStatus = signalQuality;
 
   tft.setTextSize(2);
   tft.setTextColor(ILI9341_WHITE);
@@ -3779,21 +3780,57 @@ void updateNetworkInfo(int startX, int startY, bool forceRedraw = false) {
   }
 
   int signalY = startY + 30;
-  if (forceRedraw || prevSignalStr.length() != newSignalStr.length() || prevSignalStr == "") {
-    tft.fillRect(startX, signalY, newSignalStr.length() * 12, 16, ILI9341_BLACK);
+  static bool staticDrawn = false;
+  if (forceRedraw || !staticDrawn) {
+    tft.fillRect(startX, signalY, String("Signal: ").length() * 12, 16, ILI9341_BLACK);
     tft.setCursor(startX, signalY);
-    tft.print(newSignalStr);
+    tft.print("Signal: ");
+    staticDrawn = true;
+  }
+
+  int baseX = startX + String("Signal: ").length() * 12;
+  if (forceRedraw || newSignalStatus != prevSignalStatus) {
+    int prevDigitsLen = prevSignalDigits.length();
+    int prevStatusLen = prevSignalStatus.length();
+    int newDigitsLen = newSignalDigits.length();
+    int newStatusLen = newSignalStatus.length();
+
+    String fixed = " dBm (";
+    int prevWidth = (prevDigitsLen + fixed.length() + prevStatusLen + 1) * 12;
+    int newWidth = (newDigitsLen + fixed.length() + newStatusLen + 1) * 12;
+    int clearWidth = max(prevWidth, newWidth);
+
+    tft.fillRect(baseX, signalY, clearWidth, 16, ILI9341_BLACK);
+    tft.setCursor(baseX, signalY);
+    tft.print(newSignalDigits);
+    tft.print(" dBm (");
+
+    uint16_t statusColor;
+    if (newSignalStatus == "Amazing") {
+      statusColor = ILI9341_GREEN;
+    } else if (newSignalStatus == "Good") {
+      statusColor = ILI9341_BLUE;
+    } else if (newSignalStatus == "Fair") {
+      statusColor = ILI9341_YELLOW;
+    } else {
+      statusColor = ILI9341_RED;
+    }
+    tft.setTextColor(statusColor);
+    tft.print(newSignalStatus);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.print(")");
   } else {
-    for (int i = 8; i < newSignalStr.length(); i++) {
-      if (newSignalStr.charAt(i) != prevSignalStr.charAt(i)) {
-        int charX = startX + i * 12;
-        tft.fillRect(charX, signalY, 12, 16, ILI9341_BLACK);
-        tft.setCursor(charX, signalY);
-        tft.print(newSignalStr.charAt(i));
-      }
+    if (newSignalDigits != prevSignalDigits) {
+      int digitsX = baseX;
+      int digitsWidth = newSignalDigits.length() * 12;
+      tft.fillRect(digitsX, signalY, digitsWidth, 16, ILI9341_BLACK);
+      tft.setCursor(digitsX, signalY);
+      tft.print(newSignalDigits);
     }
   }
-  prevSignalStr = newSignalStr;
+
+  prevSignalDigits = newSignalDigits;
+  prevSignalStatus = newSignalStatus;
 }
 
 void updateUptimeDisplay(int startX, int startY, bool forceRedraw = false) {
