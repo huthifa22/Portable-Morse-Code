@@ -946,7 +946,6 @@ void runWiFiDisconnectCloudReconnectScreen() {
     tft.fillScreen(ILI9341_BLACK);
     tft.setTextSize(2);
     tft.setTextColor(ILI9341_WHITE);
-
     const char* prompt1 = "Disconnect WiFi";
     const char* prompt2 = "or Reconnect Cloud?";
     int16_t x1, y1;
@@ -982,6 +981,18 @@ void runWiFiDisconnectCloudReconnectScreen() {
     tft.setTextSize(2);
     tft.print("Reconnect");
 
+    int16_t exitWidth = 80;
+    int16_t exitHeight = 30;
+    int16_t exitX = ((tft.width() - exitWidth) / 2) + 4;
+    int16_t exitY = tft.height() - exitHeight - 10;
+
+    tft.fillRect(exitX, exitY, exitWidth, exitHeight, ILI9341_WHITE);
+    tft.getTextBounds("Exit", 0, 0, &x1, &y1, &w, &h);
+    tft.setCursor(exitX + (exitWidth - w) / 2, exitY + (exitHeight - h) / 2);
+    tft.setTextSize(2);
+    tft.setTextColor(ILI9341_BLACK);
+    tft.print("Exit");
+
     screenDrawn = true;
   }
 
@@ -1007,6 +1018,16 @@ void runWiFiDisconnectCloudReconnectScreen() {
     if (calX > reconnectX && calX < reconnectX + buttonWidth && calY > buttonY && calY < buttonY + buttonHeight) {
       screenDrawn = false;
       currentState = STATE_RECONNECTION;
+    }
+
+    int16_t exitWidth = 80;
+    int16_t exitHeight = 30;
+    int16_t exitX = ((tft.width() - exitWidth) / 2) + 20;
+    int16_t exitY = tft.height() - exitHeight - 10;
+
+    if (calX > exitX && calX < exitX + exitWidth && calY > exitY && calY < exitY + exitHeight) {
+      screenDrawn = false;
+      currentState = STATE_MAIN_MENU;
     }
   }
 }
@@ -1228,8 +1249,11 @@ void onTextMessageChange() {
     return;
   }
 
-  Serial.print("Message received: ");
-  Serial.println(textMessage);
+  if (textToMorse(textMessage) == "Invalid Text") {
+    textMessage = "PMC received: \"Invalid Text\"";
+    ArduinoCloud.update();
+    return;
+  }
 
   messageQueue.push_back(textMessage);
 }
@@ -1718,7 +1742,9 @@ void guideScreen() {
         int currentY = startY;
         for (int row = 0; row < 9 && index < 26; row++) {
           tft.setCursor(colX[col], currentY);
+          tft.setTextColor(ILI9341_YELLOW);
           tft.print(letters[index]);
+          tft.setTextColor(ILI9341_WHITE);
           tft.print(": ");
           tft.print(morseCodes[index]);
           currentY += rowHeight;
@@ -1741,8 +1767,14 @@ void guideScreen() {
       for (int col = 0; col < 2; col++) {
         int currentY = startY;
         for (int row = 0; row < 5 && index < 10; row++) {
-          tft.setCursor(colX[col], currentY);
+          if (col == 0) {
+            tft.setCursor(colX[col], currentY);
+          } else {
+            tft.setCursor(tft.width() - 110, currentY);
+          }
+          tft.setTextColor(ILI9341_YELLOW);
           tft.print(numbers[index]);
+          tft.setTextColor(ILI9341_WHITE);
           tft.print(": ");
           tft.print(morseCodes[index]);
           currentY += rowHeight;
@@ -1785,6 +1817,7 @@ void guideScreen() {
     int toggleButtonY = tft.height() - 40;
     int toggleButtonWidth = 100;
     int toggleButtonHeight = 30;
+
     if (calX > toggleButtonX && calX < toggleButtonX + toggleButtonWidth && calY > toggleButtonY && calY < toggleButtonY + toggleButtonHeight) {
       screenDrawn = false;
       isShowingNumbers = !isShowingNumbers;
@@ -1795,6 +1828,7 @@ void guideScreen() {
     int exitButtonY = tft.height() - 40;
     int exitButtonWidth = 100;
     int exitButtonHeight = 30;
+
     if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
       screenDrawn = false;
       currentState = STATE_MAIN_MENU;
@@ -2745,7 +2779,7 @@ void runGameScreen() {
 
     if (displayWord == "") {
       randomSeed(analogRead(0));
-      int index = random(0, 5);
+      int index = random(0, 10);
       displayWord = fallbackWordsByLength[randomWordLength][index];
     }
 
