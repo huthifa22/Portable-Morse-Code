@@ -190,7 +190,6 @@ void runStartupScreen() {
 
     tft.fillScreen(ILI9341_BLACK);
     tft.setFont(&FreeSansBoldOblique18pt7b);
-    tft.setTextColor(tft.color565(0, 255, 0));
 
     const char* text = "PMC";
     int16_t x1, y1;
@@ -201,14 +200,23 @@ void runStartupScreen() {
     int16_t centerY = (tft.height() - h) / 2;
 
     for (int radius = 8; radius >= 0; radius -= 2) {
-      tft.setTextColor(tft.color565(0, (radius * 255) / 8, 0));
       tft.setCursor(centerX - radius, centerY - radius);
+      tft.setTextColor(tft.color565(0, 0, 255 - ((radius * 255) / 8)));
       tft.print(text);
       delay(110);
     }
 
-    tft.setTextColor(tft.color565(0, 255, 0));
+    for (int dx = -1; dx <= 1; dx++) {
+      for (int dy = -1; dy <= 1; dy++) {
+        if (dx == 0 && dy == 0) continue;
+        tft.setCursor(centerX + dx, centerY + dy);
+        tft.setTextColor(ILI9341_WHITE);
+        tft.print(text);
+      }
+    }
+
     tft.setCursor(centerX, centerY);
+    tft.setTextColor(tft.color565(0, 0, 255));
     tft.print(text);
 
     int progressBarX = 20;
@@ -219,7 +227,7 @@ void runStartupScreen() {
     tft.drawRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, ILI9341_WHITE);
 
     for (int progress = 0; progress <= progressBarWidth - 4; progress += 7) {
-      uint16_t gradientColor = tft.color565(0, (progress * 255) / (progressBarWidth - 4), 0);
+      uint16_t gradientColor = tft.color565(0, 0, (progress * 255) / (progressBarWidth - 4));
       tft.fillRect(progressBarX + 2, progressBarY + 2, progress, progressBarHeight - 4, gradientColor);
 
       int percent = min(100, (progress * 100) / (progressBarWidth - 4));
@@ -234,7 +242,7 @@ void runStartupScreen() {
       delay(20);
     }
 
-    tft.fillRect(progressBarX + 2, progressBarY + 2, progressBarWidth - 4, progressBarHeight - 4, tft.color565(0, 255, 0));
+    tft.fillRect(progressBarX + 2, progressBarY + 2, progressBarWidth - 4, progressBarHeight - 4, tft.color565(0, 0, 255));
     tft.fillRect(progressBarX, progressBarY - 40, progressBarWidth, 30, ILI9341_BLACK);
     tft.setFont();
     tft.setTextSize(2);
@@ -527,7 +535,7 @@ void runWiFiCredentialsScreen() {
         }
       }
 
-      delay(40);
+      delay(100);
 
       ssidScrollOffset = max(0, (int)ssid.length() - visibleChars);
       tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
@@ -1721,8 +1729,11 @@ void guideScreen() {
   if (!screenDrawn) {
     resetState();
     tft.fillScreen(ILI9341_BLACK);
+
+    tft.setCursor(6, 9);
     tft.setTextSize(2);
     tft.setTextColor(ILI9341_WHITE);
+    tft.print("Guide");
 
     if (!isShowingNumbers) {
       const char* morseCodes[] = {
@@ -1735,9 +1746,9 @@ void guideScreen() {
       int colWidth = tft.width() / 3;
       int rowHeight = 20;
       int colX[] = { 10, colWidth + 10, 2 * colWidth + 10 };
-      int startY = 10;
-
+      int startY = 48;
       int index = 0;
+
       for (int col = 0; col < 3; col++) {
         int currentY = startY;
         for (int row = 0; row < 9 && index < 26; row++) {
@@ -1756,14 +1767,14 @@ void guideScreen() {
         "-----", ".----", "..---", "...--", "....-", ".....",
         "-....", "--...", "---..", "----."
       };
-      const char numbers[] = "0123456789";
 
+      const char numbers[] = "0123456789";
       int colWidth = tft.width() / 2;
       int rowHeight = 20;
       int colX[] = { 10, colWidth + 10 };
-      int startY = 10;
-
+      int startY = 48;
       int index = 0;
+
       for (int col = 0; col < 2; col++) {
         int currentY = startY;
         for (int row = 0; row < 5 && index < 10; row++) {
@@ -1783,51 +1794,64 @@ void guideScreen() {
       }
     }
 
-    int toggleButtonX = 10;
-    int toggleButtonY = tft.height() - 40;
-    int toggleButtonWidth = 100;
-    int toggleButtonHeight = 30;
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+    tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
 
+    int16_t textX = exitButtonX + (exitButtonWidth - 48) / 2;
+    int16_t textY = exitButtonY + (exitButtonHeight - 16) / 2 + 2;
+    tft.setCursor(textX, textY);
+    tft.setTextColor(ILI9341_WHITE);
+    tft.setTextSize(2);
+    tft.print("EXIT");
+    tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+
+    int toggleButtonWidth = 60;
+    int toggleButtonHeight = 25;
+    int toggleButtonX = exitButtonX - toggleButtonWidth - 10;
+    int toggleButtonY = 5;
+
+    const char* toggleLabel = isShowingNumbers ? "Abc" : "#'s";
     tft.fillRect(toggleButtonX, toggleButtonY, toggleButtonWidth, toggleButtonHeight, ILI9341_BLUE);
     tft.drawRect(toggleButtonX, toggleButtonY, toggleButtonWidth, toggleButtonHeight, ILI9341_WHITE);
-    tft.setTextColor(ILI9341_WHITE);
-    tft.setCursor(toggleButtonX + 10, toggleButtonY + 8);
-    tft.print(isShowingNumbers ? "Letters" : "Numbers");
 
-    int exitButtonX = tft.width() - 110;
-    int exitButtonY = tft.height() - 40;
-    int exitButtonWidth = 100;
-    int exitButtonHeight = 30;
+    int textSizeVal = 2;
+    int charWidth = 6 * textSizeVal;
+    int labelLength = strlen(toggleLabel);
+    int textPixelWidth = labelLength * charWidth;
+    int toggleCenterX = toggleButtonX + (toggleButtonWidth - textPixelWidth) / 2;
+    int toggleCenterY = toggleButtonY + (toggleButtonHeight - 16) / 2 + 1;
 
-    tft.fillRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_RED);
-    tft.drawRect(exitButtonX, exitButtonY, exitButtonWidth, exitButtonHeight, ILI9341_WHITE);
+    tft.setCursor(toggleCenterX, toggleCenterY);
     tft.setTextColor(ILI9341_WHITE);
-    tft.setCursor(exitButtonX + 25, exitButtonY + 8);
-    tft.print("EXIT");
+    tft.setTextSize(textSizeVal);
+    tft.print(toggleLabel);
 
     screenDrawn = true;
   }
 
   TSPoint p = ts.getPoint();
+
   if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
     int calX = (p.y * xCalM) + xCalC;
     int calY = (p.x * yCalM) + yCalC;
 
-    int toggleButtonX = 10;
-    int toggleButtonY = tft.height() - 40;
-    int toggleButtonWidth = 100;
-    int toggleButtonHeight = 30;
+    int toggleButtonWidth = 60;
+    int toggleButtonHeight = 25;
+    int exitButtonWidth = 60;
+    int exitButtonHeight = 25;
+    int exitButtonX = tft.width() - 60;
+    int exitButtonY = 5;
+    int toggleButtonX = exitButtonX - toggleButtonWidth - 10;
+    int toggleButtonY = 5;
 
     if (calX > toggleButtonX && calX < toggleButtonX + toggleButtonWidth && calY > toggleButtonY && calY < toggleButtonY + toggleButtonHeight) {
       screenDrawn = false;
       isShowingNumbers = !isShowingNumbers;
       return;
     }
-
-    int exitButtonX = tft.width() - 110;
-    int exitButtonY = tft.height() - 40;
-    int exitButtonWidth = 100;
-    int exitButtonHeight = 30;
 
     if (calX > exitButtonX && calX < exitButtonX + exitButtonWidth && calY > exitButtonY && calY < exitButtonY + exitButtonHeight) {
       screenDrawn = false;
@@ -2061,7 +2085,7 @@ void runEncodeScreen() {
         }
       }
 
-      delay(40);
+      delay(100);
 
       inputScrollOffset = max(0, (int)inputText.length() - visibleChars);
       tft.fillRect(6, textAreaY + 1, boxWidth - 2, inputBoxHeight - 2, ILI9341_BLACK);
@@ -2653,19 +2677,40 @@ void runDecodeScreen() {
 
 void runGameScreen() {
 
-  static const char* fallbackWordsByLength[11][10] = {
-    { "", "", "", "", "", "", "", "", "", "" },
-    { "A", "I", "O", "U", "Y", "E", "R", "S", "T", "N" },                                                                                           // 1-letter words
-    { "OF", "TO", "IT", "BY", "IN", "UP", "NO", "DO", "GO", "ME" },                                                                                 // 2-letter words
-    { "CAT", "DOG", "RUN", "SKY", "CAR", "BAT", "FOX", "PEN", "RAT", "SUN" },                                                                       // 3-letter words
-    { "CODE", "LOVE", "HATE", "COOL", "FAST", "FIRE", "WIND", "TIME", "LIFE", "WAVE" },                                                             // 4-letter words
-    { "HELLO", "WORLD", "QUICK", "BROWN", "SMART", "FLASH", "LIGHT", "BRAVE", "GRACE", "PEACE" },                                                   // 5-letter words
-    { "MORSE", "SYSTEM", "DEVICE", "PUZZLE", "SECRET", "CIPHER", "SIGNAL", "LETTER", "NUMBER", "NOTICE" },                                          // 6-letter words
-    { "NETWORK", "PROGRAM", "DISPLAY", "EXAMPLE", "CONTROL", "BALANCE", "PROCESS", "CAPTURE", "CONNECT", "ANALYZE" },                               // 7-letter words
-    { "COMPUTER", "KEYBOARD", "FUNCTION", "VARIABLE", "SOLUTION", "SOFTWARE", "HARDWARE", "SECURITY", "DATABASE", "INTERNET" },                     // 8-letter words
-    { "GENERATOR", "MECHANISM", "FRAMEWORK", "PROCEDURE", "INTERFACE", "TECHNICAL", "EQUATIONS", "KNOWLEDGE", "INNOVATOR", "DISCOVERY" },           // 9-letter words
-    { "MICROPHONE", "INNOVATION", "TECHNOLOGY", "PERFECTION", "EXPRESSION", "TRANSITION", "CREATIVITY", "DEFINITION", "IMPRESSION", "EXCELLENCE" }  // 10-letter words
+  static const char* fallbackWordsByLength[11][20] = {
+    { "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "" },
+    { // 1-letter words
+      "A", "I", "O", "U", "Y", "E", "R", "S", "T", "N",
+      "L", "Q", "X", "C", "W", "M", "B", "D", "F", "G" },
+    { // 2-letter words
+      "OF", "TO", "IT", "BY", "IN", "UP", "NO", "DO", "GO", "ME",
+      "AM", "SO", "ON", "MY", "IF", "OR", "WE", "US", "OK", "TV" },
+    { // 3-letter words
+      "CAT", "DOG", "RUN", "SKY", "CAR", "BAT", "FOX", "PEN", "RAT", "SUN",
+      "ICE", "AIR", "SEA", "BAR", "BEE", "HEN", "MAN", "CAN", "BOX", "JOY" },
+    { // 4-letter words
+      "CODE", "LOVE", "HATE", "COOL", "FAST", "FIRE", "WIND", "TIME", "LIFE", "WAVE",
+      "TREE", "MOON", "STAR", "RAIN", "BALL", "HILL", "ROSE", "MIST", "KIND", "GATE" },
+    { // 5-letter words
+      "HELLO", "WORLD", "QUICK", "BROWN", "SMART", "FLASH", "LIGHT", "BRAVE", "GRACE", "PEACE",
+      "FRUIT", "BLAST", "CRANE", "POINT", "NIGHT", "WATER", "STONE", "EARTH", "HEART", "TIGER" },
+    { // 6-letter words
+      "MORSE", "SYSTEM", "DEVICE", "PUZZLE", "SECRET", "CIPHER", "SIGNAL", "LETTER", "NUMBER", "NOTICE",
+      "STREAM", "THINGS", "REWARD", "THROAT", "DANGER", "BREEZE", "INVENT", "SAVING", "SILENT", "DESIGN" },
+    { // 7-letter words
+      "NETWORK", "PROGRAM", "DISPLAY", "EXAMPLE", "CONTROL", "BALANCE", "PROCESS", "CAPTURE", "CONNECT", "ANALYZE",
+      "EMULATE", "DESTROY", "REBUILD", "FREEDOM", "INTEGER", "SILICON", "MUSICAL", "CIRCUIT", "NATURAL", "MELODIC" },
+    { // 8-letter words
+      "COMPUTER", "KEYBOARD", "FUNCTION", "VARIABLE", "SOLUTION", "SOFTWARE", "HARDWARE", "SECURITY", "DATABASE", "INTERNET",
+      "NOTEBOOK", "SCHEMATIC", "SELECTION", "ANALYSIS", "CREATION", "DESERTION", "STRATEGY", "OVERRIDE", "CLUSTER", "TEMPLATE" },
+    { // 9-letter words
+      "GENERATOR", "MECHANISM", "FRAMEWORK", "PROCEDURE", "INTERFACE", "TECHNICAL", "EQUATIONS", "KNOWLEDGE", "INNOVATOR", "DISCOVERY",
+      "NARRATIVE", "PLACEMENT", "TERMINATE", "MOTIVATION", "CHARACTER", "CELLULOID", "INCREDIBLE", "MAGELLAN", "AUTHORITY", "PROMOTION" },
+    { // 10-letter words
+      "MICROPHONE", "INNOVATION", "TECHNOLOGY", "PERFECTION", "EXPRESSION", "TRANSITION", "CREATIVITY", "DEFINITION", "IMPRESSION", "EXCELLENCE",
+      "UNDERSTAND", "KNOWLEDGE", "INSIDIOUS", "ALTERNATOR", "INTERCOSTA", "OPTIONALITY", "NAVIGABLE", "DIAPHRAGM", "FASCINATOR", "PERSUASION" }
   };
+
 
   static String displayWord = "";
   static bool buttonPressed = false;
@@ -2779,7 +2824,7 @@ void runGameScreen() {
 
     if (displayWord == "") {
       randomSeed(analogRead(0));
-      int index = random(0, 10);
+      int index = random(0, 20);
       displayWord = fallbackWordsByLength[randomWordLength][index];
     }
 
@@ -2969,7 +3014,7 @@ void runGameScreen() {
           }
 
           if (newLetter == "") {
-            int index = random(0, 5);
+            int index = random(0, 20);
             newLetter = fallbackWordsByLength[randomWordLength][index];
           }
           displayWord = newLetter;
@@ -3287,12 +3332,12 @@ void runToolsScreen() {
 
     bool updatedWPM = false;
     if (calX > minusButtonX && calX < minusButtonX + buttonWidth && calY > minusButtonY && calY < minusButtonY + buttonHeight) {
-      if (WPM > 5) {
+      if (WPM > 1) {
         WPM--;
         updatedWPM = true;
       }
     } else if (calX > plusButtonX && calX < plusButtonX + buttonWidth && calY > plusButtonY && calY < plusButtonY + buttonHeight) {
-      if (WPM < 30) {
+      if (WPM < 50) {
         WPM++;
         updatedWPM = true;
       }
@@ -3353,7 +3398,7 @@ void runToolsScreen() {
         updatedThresh = true;
       }
     } else if (calX > plusButtonX3 && calX < plusButtonX3 + buttonWidth && calY > plusButtonY3 && calY < plusButtonY3 + buttonHeight) {
-      if (buttonPressTimingThreshold < 1000) {
+      if (buttonPressTimingThreshold < 4000) {
         buttonPressTimingThreshold += 50;
         updatedThresh = true;
       }
@@ -3727,11 +3772,11 @@ void updateLocationDisplay(int startX, int startY, bool forceRedraw = false) {
   static String locationStr = "";
   static unsigned long lastLocationUpdate = 0;
 
-  if (millis() - lastLocationUpdate > 300000 || locationStr == "") {
+  if (millis() - lastLocationUpdate > 100000 || locationStr == "") {
     WiFiClient client;
-    if (client.connect("ipwho.is", 80)) {
-      client.println("GET / HTTP/1.1");
-      client.println("Host: ipwho.is");
+    if (client.connect("ip-api.com", 80)) {
+      client.println("GET /json HTTP/1.1");
+      client.println("Host: ip-api.com");
       client.println("Connection: close");
       client.println();
 
@@ -3748,16 +3793,16 @@ void updateLocationDisplay(int startX, int startY, bool forceRedraw = false) {
         StaticJsonDocument<512> doc;
         DeserializationError err = deserializeJson(doc, json);
 
-        if (!err && doc["success"] == true) {
+        if (!err && String((const char*)doc["status"]) == "success") {
           String city = doc["city"];
-          String regionAbbr = doc["region_code"];
+          String region = doc["region"];
           String country = doc["country"];
 
           if (country == "United States") {
             country = "USA";
           }
 
-          locationStr = city + ", " + regionAbbr + ", " + country;
+          locationStr = city + ", " + region + ", " + country;
           lastLocationUpdate = millis();
         }
       }
