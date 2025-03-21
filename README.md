@@ -1,6 +1,7 @@
 # Portable-Morse-Code
 
 # Circuit Diagram 
-![image](https://github.com/user-attachments/assets/8df4163d-956f-444a-9243-6dbab1501aa8)
+![Circuit Diagram](https://github.com/user-attachments/assets/8c88c841-4a3c-412d-854f-d30a6e768c12)
+
 
 
